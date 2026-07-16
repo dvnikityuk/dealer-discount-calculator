@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Вариант C — Дашборд с акцентом</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    background: #fafaf9;
+    color: #0f172a;
+    padding: 24px;
+    width: 1400px;
+  }
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 16px; margin-bottom: 24px;
+  }
+  .header h1 { font-size: 20px; font-weight: 700; color: #0f172a; }
+  .header .sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .header .dealer-select {
+    background: white; border: 1px solid #cbd5e1; border-radius: 8px;
+    padding: 8px 16px; font-size: 13px; font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .header .dealer-select .badge {
+    background: #0f172a; color: white; padding: 2px 6px; border-radius: 4px;
+    font-size: 10px;
+  }
+
+  .grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  }
+  .scale-card {
+    background: white; border-radius: 14px; overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+    border: 1px solid #f1f5f9;
+  }
+  .scale-card .head {
+    padding: 16px 20px 0;
+  }
+  .scale-card .title { font-size: 14px; font-weight: 600; color: #0f172a; }
+  .scale-card .period { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+  /* Hero strip — large active % */
+  .hero {
+    margin: 12px 20px 16px; padding: 16px 20px;
+    border-radius: 10px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .hero.eq { background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border: 1px solid #a7f3d0; }
+  .hero.mat { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 1px solid #fde68a; }
+  .hero.svc { background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%); border: 1px solid #ddd6fe; }
+
+  .hero .left .lbl {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    font-weight: 700; color: #475569; margin-bottom: 4px;
+  }
+  .hero.eq .left .lbl { color: #047857; }
+  .hero.mat .left .lbl { color: #b45309; }
+  .hero.svc .left .lbl { color: #6d28d9; }
+  .hero .left .val {
+    font-size: 32px; font-weight: 800; color: #0f172a; letter-spacing: -1px;
+  }
+  .hero.eq .left .val { color: #047857; }
+  .hero.mat .left .val { color: #b45309; }
+  .hero.svc .left .val { color: #6d28d9; }
+  .hero .right { text-align: right; }
+  .hero .right .tier-lbl { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .hero .right .tier-val { font-size: 14px; font-weight: 700; color: #0f172a; margin-top: 2px; }
+  .hero .right .fact { font-size: 11px; color: #64748b; margin-top: 4px; }
+
+  /* Compact data table */
+  .data-tbl { width: 100%; border-collapse: collapse; }
+  .data-tbl th, .data-tbl td {
+    padding: 7px 12px; font-size: 11px; text-align: right;
+    border-top: 1px solid #f1f5f9;
+  }
+  .data-tbl th {
+    background: #fafaf9; color: #64748b; font-weight: 600; text-transform: uppercase;
+    font-size: 9px; letter-spacing: 0.5px;
+  }
+  .data-tbl th:first-child, .data-tbl td:first-child {
+    text-align: left; color: #475569; font-weight: 500; text-transform: none; font-size: 11px; letter-spacing: 0;
+  }
+  .data-tbl td.active {
+    font-weight: 700;
+  }
+  .data-tbl td.active.eq { color: #047857; background: #f0fdf4; }
+  .data-tbl td.active.mat { color: #b45309; background: #fffbeb; }
+  .data-tbl td.active.svc { color: #6d28d9; background: #f5f3ff; }
+  .data-tbl tr.total td {
+    background: #fafaf9; font-weight: 700; color: #0f172a; border-top: 2px solid #e2e8f0;
+  }
+  .data-tbl tr.total td.active.eq { background: #d1fae5; }
+  .data-tbl tr.total td.active.mat { background: #fef3c7; }
+  .data-tbl tr.total td.active.svc { background: #ede9fe; }
+
+  /* Pillar indicator above active column */
+  .pillar {
+    display: inline-block; width: 4px; height: 10px; vertical-align: middle;
+    margin-right: 4px; border-radius: 2px;
+  }
+  .pillar.eq { background: #047857; }
+  .pillar.mat { background: #b45309; }
+  .pillar.svc { background: #6d28d9; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Шкалы скидок</h1>
+      <div class="sub">Активный тир определяется автоматически по факту отгрузок за период</div>
+    </div>
+    <div class="dealer-select">
+      КОМПО Технолоджис
+      <span class="badge">РФ</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Оборудование -->
+    <div class="scale-card">
+      <div class="head">
+        <div class="title">Оборудование — за квартал</div>
+        <div class="period">Объём закупок в тыс. EUR за 3 месяца</div>
+      </div>
+      <div class="hero eq">
+        <div class="left">
+          <div class="lbl">Активная скидка</div>
+          <div class="val">19.0%</div>
+        </div>
+        <div class="right">
+          <div class="tier-lbl">Тир</div>
+          <div class="tier-val">190+ тыс. €</div>
+          <div class="fact">Факт: 315 тыс. €</div>
+        </div>
+      </div>
+      <table class="data-tbl">
+        <thead>
+          <tr>
+            <th>Компонент</th>
+            <th>до 75</th>
+            <th>75–114</th>
+            <th>115–149</th>
+            <th>150–189</th>
+            <th><span class="pillar eq"></span>190+</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Базовое вознаграждение</td><td>6%</td><td>6%</td><td>6%</td><td>6%</td><td class="active eq">6%</td></tr>
+          <tr><td>Сервисный центр</td><td>6%</td><td>6%</td><td>6%</td><td>6%</td><td class="active eq">6%</td></tr>
+          <tr><td>Гарантийный сервис</td><td>1%</td><td>1%</td><td>1%</td><td>1%</td><td class="active eq">1%</td></tr>
+          <tr><td>Объём закупок МП</td><td>1%</td><td>5%</td><td>6%</td><td>7%</td><td class="active eq">7%</td></tr>
+          <tr class="total"><td>ИТОГО</td><td>14%</td><td>18%</td><td>19%</td><td>20%</td><td class="active eq">19%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Расходные материалы -->
+    <div class="scale-card">
+      <div class="head">
+        <div class="title">Расходные материалы — за квартал</div>
+        <div class="period">Объём закупок в тыс. EUR за 3 месяца</div>
+      </div>
+      <div class="hero mat">
+        <div class="left">
+          <div class="lbl">Активная скидка</div>
+          <div class="val">6.0%</div>
+        </div>
+        <div class="right">
+          <div class="tier-lbl">Тир</div>
+          <div class="tier-val">65+ тыс. €</div>
+          <div class="fact">Факт: 537 тыс. €</div>
+        </div>
+      </div>
+      <table class="data-tbl">
+        <thead>
+          <tr>
+            <th>Компонент</th>
+            <th>до 24</th>
+            <th>25–34</th>
+            <th>35–44</th>
+            <th>45–54</th>
+            <th>55–64</th>
+            <th><span class="pillar mat"></span>65+</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Мин. остатки</td><td>1%</td><td>1%</td><td>1%</td><td>1%</td><td>1%</td><td class="active mat">1%</td></tr>
+          <tr><td>Объём закупок РМ</td><td>0%</td><td>1%</td><td>2%</td><td>3%</td><td>4%</td><td class="active mat">5%</td></tr>
+          <tr class="total"><td>ИТОГО</td><td>1%</td><td>2%</td><td>3%</td><td>4%</td><td>5%</td><td class="active mat">6%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Сервис -->
+    <div class="scale-card">
+      <div class="head">
+        <div class="title">Сервис (ЗЧ) — за 12 месяцев</div>
+        <div class="period">Абсолютные отгрузки в EUR за финансовый год</div>
+      </div>
+      <div class="hero svc">
+        <div class="left">
+          <div class="lbl">Активная скидка</div>
+          <div class="val">19.0%</div>
+        </div>
+        <div class="right">
+          <div class="tier-lbl">Тир</div>
+          <div class="tier-val">от 3001 €</div>
+          <div class="fact">Накопл.: 101 048 €</div>
+        </div>
+      </div>
+      <table class="data-tbl">
+        <thead>
+          <tr>
+            <th>Диапазон</th>
+            <th>0–500</th>
+            <th>501–1000</th>
+            <th>1001–2000</th>
+            <th>2001–3000</th>
+            <th><span class="pillar svc"></span>от 3001</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>% скидки</td><td>15%</td><td>16%</td><td>17%</td><td>18%</td><td class="active svc">19%</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Система контроля -->
+    <div class="scale-card">
+      <div class="head">
+        <div class="title">Система контроля (штрафы)</div>
+        <div class="period">Снижение скидки будущих периодов</div>
+      </div>
+      <div class="hero" style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border: 1px solid #fecaca;">
+        <div class="left">
+          <div class="lbl" style="color: #b91c1c;">Штрафы не применяются</div>
+          <div class="val" style="color: #b91c1c; font-size: 22px;">План выполнен</div>
+        </div>
+        <div class="right">
+          <div class="tier-lbl">Статус</div>
+          <div class="tier-val" style="color: #16a34a;">✓ OK</div>
+          <div class="fact">ДЗ: 0 просроч.</div>
+        </div>
+      </div>
+      <table class="data-tbl">
+        <thead>
+          <tr><th>Критерий штрафа</th><th>Снижение</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>План ИТОГО &lt; 95%</td><td>−100%</td></tr>
+          <tr><td>Просроченная ДЗ</td><td>−50%</td></tr>
+          <tr><td>Категория сервиса снижена</td><td>−10%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
