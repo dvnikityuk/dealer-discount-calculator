@@ -3,324 +3,577 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Калькулятор скидок для дилеров КОМПО</title>
+<title>Расчёт скидок дилеров — КОМПО</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
+/* ─── Tailwind-like utilities, faithfully matching the Next.js app ────────── */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+
 :root {
-  --bg: #f4f5f7;
+  --background: #ffffff;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --border: #e0e3e8;
-  --border-light: #eef0f3;
-  --head-bg: #f7f8fa;
-  --head-text: #4a5568;
-  --row-alt: #fafbfc;
-  --text: #2d3748;
-  --text-dim: #a0aec0;
-  --accent: #3b82f6;
-  --accent-light: #eff6ff;
-  --green: #16a34a;
-  --green-bg: #ecfdf5;
-  --green-border: #a7f3d0;
-  --green-text: #047857;
-  --violet-bg: #f5f3ff;
-  --violet-text: #6d28d9;
-  --amber-bg: #fffbeb;
-  --amber-text: #92400e;
-  --red: #dc2626;
-  --radius: 4px;
-  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  --card-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --border: #e2e8f0;
+  --border-light: #f1f5f9;
+  --input: #e2e8f0;
+  --ring: #94a3b8;
+  --primary: #0f172a;
+  --primary-foreground: #f8fafc;
+  --accent: #f1f5f9;
+  --radius: 0.625rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  font-family: var(--font);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 13px;
-  line-height: 1.4;
+html, body {
+  background: #f9fafb;
+  color: var(--foreground);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-.app { max-width: 1400px; margin: 0 auto; padding: 16px 20px; }
+.app-shell { min-haight: 100vh; min-height: 100vh; display: flex; flex-direction: column; }
 
 .header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);
+  padding: 16px 24px;
 }
-.header-title { font-size: 18px; font-weight: 700; color: #1a202c; letter-spacing: -0.3px; }
-.header-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; font-weight: 400; }
-.header-actions { display: flex; gap: 8px; }
+.header-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.logo {
+  width: 40px; height: 40px; border-radius: 8px;
+  background: #059669;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 18px;
+}
+.header-title {
+  font-size: 20px; font-weight: 700; color: #111827; line-height: 1.2;
+}
+.header-sub { font-size: 14px; color: #6b7280; margin-top: 2px; }
+.header-right { display: flex; align-items: center; gap: 8px; }
 
 .btn {
-  padding: 7px 14px; font-size: 12px; font-weight: 500;
-  font-family: var(--font); border-radius: var(--radius);
-  border: 1px solid transparent; cursor: pointer; transition: all .15s;
-  color: #fff; line-height: 1; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 12px; font-size: 14px; font-weight: 500;
+  font-family: inherit; line-height: 1; white-space: nowrap;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: #ffffff; color: #0f172a;
+  cursor: pointer; transition: background .15s, color .15s, border-color .15s;
 }
-.btn:hover { filter: brightness(0.92); }
-.btn:active { transform: scale(0.98); }
-.btn-orange { background: #e67e22; }
-.btn-green { background: var(--green); }
-.btn-blue { background: var(--accent); }
-.btn-gray { background: #64748b; }
+.btn:hover { background: #f8fafc; color: #1e293b; }
+.btn:active { transform: translateY(0.5px); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: #0f172a; color: white; border-color: #0f172a; }
+.btn-primary:hover { background: #1e293b; color: white; }
+.btn-sm { padding: 6px 10px; font-size: 13px; }
 
-.controls {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
-  display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end;
+.select {
+  display: inline-flex; align-items: center; justify-content: space-between;
+  gap: 8px; min-width: 140px;
+  padding: 8px 12px; font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #ffffff; color: #0f172a;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+  padding-right: 32px;
+  appearance: none;
 }
-.ctrl-group { display: flex; flex-direction: column; gap: 4px; }
-.ctrl-label { font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
-.ctrl-row { display: flex; gap: 4px; align-items: center; }
+.select:focus { outline: none; border-color: #94a3b8; box-shadow: 0 0 0 3px rgba(148,163,184,0.1); }
 
-select.ctrl-input, input.ctrl-input {
-  padding: 5px 8px; font-size: 13px;
-  font-family: var(--font); text-align: left;
-  border: 1px solid var(--border); border-radius: var(--radius);
-  background: #fff; color: var(--text); min-width: 140px;
-  transition: border-color .15s, box-shadow .15s;
+.main {
+  flex: 1; padding: 24px; max-width: 100%; margin: 0 auto;
 }
-input.ctrl-input[type=number] { width: 90px; text-align: center; font-family: var(--mono); }
-.ctrl-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(59,130,246,.1); }
 
-.tabs { display: flex; gap: 2px; margin-bottom: 10px; flex-wrap: wrap; }
+.tabs-list {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 4px; max-width: 28rem; margin-bottom: 24px;
+  background: #f1f5f9;
+  padding: 4px; border-radius: var(--radius-md);
+}
 .tab {
-  padding: 7px 16px; font-size: 13px; font-weight: 500;
-  font-family: var(--font); cursor: pointer;
-  border: 1px solid var(--border); border-bottom: none;
-  border-radius: 5px 5px 0 0; background: var(--head-bg);
-  color: var(--head-text); transition: all .15s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 6px 12px; font-size: 14px; font-weight: 500;
+  border-radius: calc(var(--radius) - 4px);
+  border: none; background: transparent; color: #64748b;
+  cursor: pointer; transition: all .15s;
 }
-.tab.active { background: var(--card); color: var(--green-text); border-bottom: 1px solid var(--card); position: relative; top: 1px; }
-.tab:hover:not(.active) { background: #eef0f3; }
+.tab:hover:not(.active) { color: #0f172a; }
+.tab.active {
+  background: #ffffff; color: #0f172a;
+  box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05);
+}
+.tab svg { width: 16px; height: 16px; }
 
 .card {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 6px; overflow: hidden; margin-bottom: 12px;
+  background: var(--card); color: var(--card-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05);
 }
+.card + .card { margin-top: 16px; }
 .card-header {
-  padding: 10px 14px; border-bottom: 1px solid var(--border-light);
-  display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--border-light);
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  flex-wrap: wrap;
 }
-.card-title { font-size: 14px; font-weight: 600; color: #1a202c; }
-.card-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.card-title { font-size: 16px; font-weight: 600; color: #0f172a; display: inline-flex; align-items: center; gap: 6px; }
+.card-description { font-size: 14px; color: #64748b; margin-top: 2px; }
 .card-body { padding: 0; }
 
-.kpi-row {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 8px; padding: 10px 14px;
-}
-.kpi {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 6px; padding: 10px 12px;
-}
-.kpi-label { font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
-.kpi-value { font-size: 18px; font-weight: 700; color: #1a202c; margin-top: 2px; font-family: var(--mono); }
-.kpi-sub { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
-
+.table-wrap { width: 100%; overflow-x: auto; }
 table.data {
   width: 100%; border-collapse: collapse; table-layout: fixed;
-  font-size: 11px;
 }
 table.data th, table.data td {
-  padding: 4px 6px; border-bottom: 1px solid var(--border-light);
-  text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding: 6px 8px; font-size: 11px; line-height: 1.3;
+  border-bottom: 1px solid var(--border-light);
+  text-align: right; white-space: nowrap;
 }
-table.data th { background: var(--head-bg); font-weight: 600; color: var(--head-text); cursor: pointer; user-select: none; }
-table.data th:hover { background: #eef0f3; }
-table.data th.sortable .sort-ind { font-size: 9px; margin-left: 2px; opacity: 0.4; }
-table.data th.sortable.active .sort-ind { opacity: 1; color: var(--green-text); }
-table.data td.cat, table.data th.cat { text-align: left; font-weight: 600; }
-table.data tr:hover { background: var(--green-bg); }
-table.data tr.no-data { opacity: 0.6; }
-table.data .text-right { text-align: right; }
-table.data .text-center { text-align: center; }
-table.data .text-left { text-align: left; }
-table.data .badge {
-  display: inline-block; padding: 1px 6px; border-radius: 3px;
-  font-size: 9px; font-weight: 600;
+table.data th {
+  background: transparent; font-weight: 500; color: var(--foreground);
+  text-align: right; vertical-align: bottom;
+  cursor: pointer; user-select: none;
+  transition: background .15s;
 }
-table.data .badge-rf { background: #e0e7ff; color: #4338ca; }
-table.data .badge-zarub { background: #fef3c7; color: #92400e; }
-table.data .discount { color: var(--green-text); font-weight: 700; }
-table.data .discount-violet { color: var(--violet-text); font-weight: 700; background: var(--violet-bg); }
-table.data .green-cell { background: rgba(236,253,245,0.5); }
-table.data .green-cell-strong { background: rgba(236,253,245,0.7); }
+table.data th.left { text-align: left; }
+table.data th.center { text-align: center; }
+table.data th:hover { background: #f1f5f9; }
+table.data td.left { text-align: left; }
+table.data td.center { text-align: center; }
+table.data td.font-medium { font-weight: 500; }
+table.data td.truncate { overflow: hidden; text-overflow: ellipsis; }
+table.data tbody tr { transition: background .15s; }
+table.data tbody tr:hover { background: rgba(16,185,129,0.05); }
+table.data tbody tr.no-data { opacity: 0.6; }
+table.data td.tabular-nums { font-variant-numeric: tabular-nums; }
+table.data th.tabular-nums { font-variant-numeric: tabular-nums; }
 
-.scale-table {
-  width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 11px;
+.group-head {
+  text-align: center; font-size: 11px; font-weight: 600;
+  background: #ecfdf5;
+  color: #047857;
+  border-left: 1px solid #a7f3d0;
+  border-right: 1px solid #a7f3d0;
+  padding: 4px 8px;
 }
-.scale-table th, .scale-table td {
-  padding: 4px 8px; border: 1px solid var(--border); text-align: right;
+.sub-head { background: rgba(236,253,245,0.6); }
+
+.discount-eq {
+  color: #047857; font-weight: 600;
+  background: rgba(236,253,245,0.4);
+  border-right: 1px solid #a7f3d0;
 }
-.scale-table th { background: var(--head-bg); font-weight: 600; }
-.scale-table th.cat, .scale-table td.cat { text-align: left; }
-.scale-table tr.total-row td { background: var(--green-bg); font-weight: 700; color: var(--green-text); }
-.scale-table td.active-col { background: var(--green-bg); font-weight: 700; color: var(--green-text); }
-.scale-table th.active-col { background: #d1fae5; color: var(--green-text); }
+.discount-mat {
+  color: #047857; font-weight: 600;
+  background: rgba(236,253,245,0.4);
+}
+.discount-violet {
+  color: #4c1d95; font-weight: 700;
+  background: #f5f3ff;
+}
+.equipment-cell {
+  background: rgba(236,253,245,0.3);
+}
+.equipment-cell.border-left { border-left: 1px solid #a7f3d0; }
+.equipment-cell.border-right { border-right: 1px solid #a7f3d0; }
 
-.scale-block { margin-bottom: 14px; }
-.scale-block h3 { font-size: 13px; margin: 8px 0 4px; color: var(--green-text); font-weight: 600; }
+.badge {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font-size: 9px; font-weight: 600; line-height: 1.4;
+  border: 1px solid transparent;
+}
+.badge-rf { background: #0f172a; color: #f8fafc; border-color: #0f172a; }
+.badge-zarub { background: #f1f5f9; color: #1e293b; border-color: #e2e8f0; }
 
-.monthly-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-.monthly-table th, .monthly-table td { padding: 3px 5px; border: 1px solid var(--border); text-align: right; }
-.monthly-table th { background: var(--head-bg); }
-.monthly-table th.cat, .monthly-table td.cat { text-align: left; font-weight: 600; background: #f8fafc; }
-.monthly-table td.empty { color: #94a3b8; }
-.monthly-table td.total { background: #fef3c7; font-weight: 700; }
+.print-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 6px;
+  color: #6b7280; border: none; background: transparent;
+  cursor: pointer; transition: all .15s;
+}
+.print-btn:hover { background: #ecfdf5; color: #047857; }
+.print-btn svg { width: 12px; height: 12px; }
+
+.sort-ind {
+  display: inline-flex; vertical-align: middle; margin-left: 2px; opacity: 0.4;
+}
+.sort-ind.active { opacity: 1; color: #059669; }
+.sort-ind svg { width: 10px; height: 10px; }
+
+.info-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; color: #9ca3af;
+  cursor: help; vertical-align: middle;
+}
+.info-icon:hover { color: #4b5563; }
+.info-icon svg { width: 14px; height: 14px; }
+
+.scales-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px; padding: 14px;
+}
+.scale-stat {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px; background: #ffffff;
+}
+.scale-stat-title {
+  font-size: 10px; font-weight: 600; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.scale-stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.scale-stat-eq { border-left: 3px solid #059669; }
+.scale-stat-eq .scale-stat-value { color: #047857; }
+.scale-stat-mat { border-left: 3px solid #d97706; }
+.scale-stat-mat .scale-stat-value { color: #c2410c; }
+.scale-stat-svc { border-left: 3px solid #7c3aed; }
+.scale-stat-svc .scale-stat-value { color: #5b21b6; }
+.scale-stat-ctrl { border-left: 3px solid #475569; }
+.scale-stat-ctrl .scale-stat-value { color: #1e293b; }
+
+.scale-block { padding: 14px; border-top: 1px solid var(--border-light); }
+.scale-block:first-child { border-top: none; }
+.scale-block h3 {
+  font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 4px;
+}
+.scale-block .sub {
+  font-size: 12px; color: #64748b; margin-bottom: 8px;
+}
+
+table.scale-table {
+  width: 100%; border-collapse: collapse; font-size: 11px;
+}
+table.scale-table th, table.scale-table td {
+  border: 1px solid var(--border);
+  padding: 4px 8px; text-align: right;
+}
+table.scale-table th { background: #f8fafc; font-weight: 600; }
+table.scale-table th.cat, table.scale-table td.cat { text-align: left; }
+table.scale-table tr.total-row td {
+  background: #ecfdf5; font-weight: 700; color: #047857;
+}
+table.scale-table td.active-col {
+  background: #ecfdf5; font-weight: 700; color: #047857;
+}
+table.scale-table th.active-col {
+  background: #d1fae5; color: #047857;
+}
+table.scale-table-mat td.active-col {
+  background: #fffbeb; font-weight: 700; color: #c2410c;
+}
+table.scale-table-mat th.active-col {
+  background: #fef3c7; color: #c2410c;
+}
+table.scale-table-mat tr.total-row td {
+  background: #fffbeb; color: #c2410c;
+}
+table.scale-table-svc td.active-col {
+  background: #f5f3ff; font-weight: 700; color: #5b21b6;
+}
+table.scale-table-svc th.active-col {
+  background: #ede9fe; color: #5b21b6;
+}
+table.scale-table-svc tr.total-row td {
+  background: #f5f3ff; color: #5b21b6;
+}
+table.scale-table-ctrl td.active-col {
+  background: #f1f5f9; font-weight: 700; color: #1e293b;
+}
+table.scale-table-ctrl th.active-col {
+  background: #e2e8f0; color: #1e293b;
+}
+
+.dealer-info {
+  background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px;
+  padding: 8px 14px; margin-bottom: 14px; font-size: 13px;
+}
+.dealer-info .name { font-weight: 700; color: #065f46; font-size: 14px; }
+.dealer-info .kpi { margin-left: 14px; color: #475569; }
+
+table.monthly {
+  width: 100%; border-collapse: collapse; font-size: 11px;
+}
+table.monthly th, table.monthly td {
+  padding: 4px 8px; border: 1px solid var(--border);
+  text-align: right;
+}
+table.monthly th { background: #f8fafc; font-weight: 600; color: #334155; }
+table.monthly th.cat, table.monthly td.cat {
+  text-align: left; font-weight: 600; background: #f8fafc; min-width: 110px;
+}
+table.monthly td.empty { color: #94a3b8; }
+table.monthly td.total, table.monthly th.total {
+  background: #fef3c7; font-weight: 700;
+}
+table.monthly tr.q-row td { background: #f1f5f9; font-weight: 600; }
+table.monthly tr.year-row td { background: #e0f2fe; font-weight: 700; }
+
+.footer {
+  background: #ffffff; border-top: 1px solid var(--border);
+  padding: 12px 24px;
+}
+.footer p {
+  text-align: center; font-size: 12px; color: #9ca3af;
+}
+
+.data-grid { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.data-row {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: #ffffff;
+}
+.data-row-info { flex: 1; }
+.data-row-info h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: #0f172a; }
+.data-row-info p { font-size: 12px; color: #64748b; }
 
 .toast {
   position: fixed; bottom: 20px; right: 20px;
-  background: #1a202c; color: white; padding: 10px 16px;
-  border-radius: 6px; font-size: 12px; opacity: 0;
-  transition: opacity .3s; pointer-events: none; z-index: 1000;
+  background: #0f172a; color: white; padding: 10px 16px;
+  border-radius: 8px; font-size: 13px;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .25s, transform .25s; pointer-events: none; z-index: 1000;
+  max-width: 360px;
 }
-.toast.show { opacity: 1; }
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.error { background: #b91c1c; }
+.toast.success { background: #047857; }
 
 .hidden { display: none !important; }
-
-.empty-state {
-  text-align: center; padding: 40px 20px; color: var(--text-dim);
-  font-size: 13px;
-}
-
-@media (max-width: 768px) {
-  .app { padding: 10px; }
-  table.data { font-size: 10px; }
-}
+.text-xs { font-size: 12px; }
+.text-muted { color: #64748b; }
 
 @media print {
-  .no-print { display: none !important; }
-  .card { page-break-inside: avoid; }
+  .no-print, .header, .footer, .tabs-list { display: none !important; }
+  .app-shell { min-height: auto; }
+  body { background: white; }
+  .card { box-shadow: none; }
+}
+
+@media (max-width: 640px) {
+  .header-inner { flex-direction: column; align-items: flex-start; }
+  .header-right { width: 100%; }
+  .main { padding: 12px; }
+  table.data th, table.data td { padding: 4px 5px; font-size: 10px; }
 }
 </style>
 </head>
 <body>
-<div class="app">
-  <div class="header">
-    <div>
-      <div class="header-title">Калькулятор скидок для дилеров КОМПО</div>
-      <div class="header-sub">Расчёт скидок по оборудованию, расходным материалам и сервису</div>
-    </div>
-    <div class="header-actions">
-      <input type="file" id="xlsx-input" accept=".xlsx,.xls" class="hidden">
-      <button class="btn btn-blue" onclick="document.getElementById('xlsx-input').click()">Загрузить XLSX</button>
-      <button class="btn btn-green" onclick="exportExcel()">Экспорт в Excel</button>
-      <button class="btn btn-orange" onclick="exportJSON()">Сохранить данные</button>
-      <button class="btn btn-gray" onclick="resetData()">Сбросить</button>
-    </div>
-  </div>
-
-  <div class="controls">
-    <div class="ctrl-group">
-      <div class="ctrl-label">Квартал</div>
-      <select class="ctrl-input" id="quarter-select" onchange="rerender()">
-        <option value="1">1 кв (Апр–Июн)</option>
-        <option value="2">2 кв (Июл–Сен) — H1 финал</option>
-        <option value="3">3 кв (Окт–Дек)</option>
-        <option value="4">4 кв (Янв–Мар) — H2 финал</option>
-      </select>
-    </div>
-    <div class="ctrl-group">
-      <div class="ctrl-label">Активный дилер (для шкал)</div>
-      <select class="ctrl-input" id="dealer-select" onchange="renderScales()"></select>
-    </div>
-    <div class="ctrl-group" style="margin-left: auto;">
-      <div class="ctrl-label">Хранилище</div>
-      <div class="ctrl-row" style="font-size: 11px; color: var(--text-dim);">
-        <span id="storage-info">—</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="tabs">
-    <div class="tab active" data-tab="summary" onclick="switchTab('summary')">Сводная таблица</div>
-    <div class="tab" data-tab="service" onclick="switchTab('service')">Сервис (накопл.)</div>
-    <div class="tab" data-tab="scales" onclick="switchTab('scales')">Шкалы скидок</div>
-    <div class="tab" data-tab="dealer" onclick="switchTab('dealer')">Карточка дилера</div>
-  </div>
-
-  <!-- Tab: Summary -->
-  <div id="tab-summary" class="tab-content">
-    <div class="card">
-      <div class="card-header">
+<div class="app-shell">
+  <header class="header no-print">
+    <div class="header-inner">
+      <div class="header-left">
+        <div class="logo">∑</div>
         <div>
-          <div class="card-title">Сводная таблица выполнения условий</div>
-          <div class="card-sub" id="summary-sub"></div>
+          <div class="header-title">Расчёт скидок дилеров</div>
+          <div class="header-sub">Условия работы ТПС 2026 ф.г. • КОМПО</div>
         </div>
       </div>
-      <div class="card-body">
-        <div class="kpi-row" id="kpi-row"></div>
-        <div style="overflow-x: auto;">
-          <table class="data" id="summary-table"></table>
-        </div>
+      <div class="header-right">
+        <select class="select" id="quarter-select">
+          <option value="1">1 квартал</option>
+          <option value="2">2 квартал</option>
+          <option value="3">3 квартал</option>
+          <option value="4">4 квартал</option>
+        </select>
+        <button class="btn btn-sm" onclick="exportExcel()" title="Экспорт в Excel">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Excel
+        </button>
       </div>
     </div>
-  </div>
+  </header>
 
-  <!-- Tab: Service -->
-  <div id="tab-service" class="tab-content hidden">
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Скидка по Сервису — накопительно</div>
-          <div class="card-sub">Накопительным итогом за расчётный период</div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div style="overflow-x: auto;">
-          <table class="data" id="service-table"></table>
-        </div>
-      </div>
+  <main class="main">
+    <div class="tabs-list" role="tablist">
+      <button class="tab active" data-tab="summary" onclick="switchTab('summary')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="5" width="3" height="13"/></svg>
+        <span>Сводная</span>
+      </button>
+      <button class="tab" data-tab="dealer" onclick="switchTab('dealer')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
+        <span>Дилер</span>
+      </button>
+      <button class="tab" data-tab="scales" onclick="switchTab('scales')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 16.5a4 4 0 1 1 8 0a4 4 0 0 1 -8 0z"/><path d="M0 16.5a4 4 0 1 1 8 0a4 4 0 0 1 -8 0z"/><path d="M4 12.5h16l-8 -9z"/></svg>
+        <span>Шкалы</span>
+      </button>
+      <button class="tab" data-tab="data" onclick="switchTab('data')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+        <span>Данные</span>
+      </button>
     </div>
-  </div>
 
-  <!-- Tab: Scales -->
-  <div id="tab-scales" class="tab-content hidden">
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Шкалы скидок — <span id="scales-dealer-name"></span></div>
-          <div class="card-sub">Активная колонка подсвечена (по факту выбранного квартала)</div>
+    <div id="tab-summary" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              Сводная таблица выполнения условий
+              <span class="info-icon" title="Скидки рассчитываются динамически по шкале дилера. РФ — за квартал, Заруб — накопительно за полугодие (Q1+Q2=H1, Q3+Q4=H2). Промежуточные значения на Q1/Q3 отображаются для мониторинга. Если нет продаж — скидка не назначается. Минимум — 14%.">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              </span>
+            </div>
+            <div class="card-description" id="summary-sub"></div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table class="data" id="summary-table"></table>
+          </div>
         </div>
       </div>
-      <div class="card-body" id="scales-body" style="padding: 12px;"></div>
-    </div>
-  </div>
 
-  <!-- Tab: Dealer card -->
-  <div id="tab-dealer" class="tab-content hidden">
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Карточка дилера</div>
-          <div class="card-sub">Детальный расчёт по выбранному дилеру</div>
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              Скидка по Сервису — накопительно
+              <span class="info-icon" title="Скидка по сервису рассчитывается по шкале «Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев» от накопленного факта.">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              </span>
+            </div>
+            <div class="card-description">Накопительным итогом за расчётный период</div>
+          </div>
         </div>
-        <button class="btn btn-green no-print" onclick="window.print()">Печать</button>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table class="data" id="service-table"></table>
+          </div>
+        </div>
       </div>
-      <div class="card-body" id="dealer-body" style="padding: 14px;"></div>
     </div>
-  </div>
+
+    <div id="tab-dealer" class="tab-content hidden">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title" id="dealer-tab-title">Помесячные отгрузки дилера</div>
+            <div class="card-description">Финансовый год: апрель → март. Столбцы — категории. Строки — месяцы и квартальные/годовые итоги.</div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select class="select" id="dealer-select" onchange="renderDealerTab()"></select>
+            <button class="btn btn-sm btn-primary" onclick="printDealer()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Печать
+            </button>
+          </div>
+        </div>
+        <div class="card-body" id="dealer-body" style="padding: 14px;"></div>
+      </div>
+    </div>
+
+    <div id="tab-scales" class="tab-content hidden">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Шкалы скидок — <span id="scales-dealer-name"></span></div>
+            <div class="card-description">Активная колонка подсвечена по факту выбранного квартала</div>
+          </div>
+          <select class="select" id="scales-dealer-select" onchange="renderScales()"></select>
+        </div>
+        <div class="card-body">
+          <div class="scales-grid" id="scales-stats"></div>
+          <div id="scales-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-data" class="tab-content hidden">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Загрузка данных</div>
+            <div class="card-description">Импорт отгрузок из XLSX / CSV файлов с вашего диска</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="data-grid">
+            <div class="data-row">
+              <div class="data-row-info">
+                <h4>Загрузить отгрузки (XLSX)</h4>
+                <p>Выберите .xlsx файл с диска. Поддерживаются форматы:<br>
+                • Один лист на дилера (название листа = имя дилера), строки = категории, колонки = месяцы Апр…Мар<br>
+                • Одна таблица с колонками: Дилер, Категория, Апр, Май, …, Мар<br>
+                • Один лист на категорию, название листа содержит «Оборудование» / «Расход» / «Сервис»</p>
+              </div>
+              <input type="file" id="xlsx-input" accept=".xlsx,.xls" class="hidden">
+              <button class="btn btn-primary" onclick="document.getElementById('xlsx-input').click()">Выбрать XLSX</button>
+            </div>
+            <div class="data-row">
+              <div class="data-row-info">
+                <h4>Загрузить отгрузки (CSV)</h4>
+                <p>CSV с разделителем «;» или «,». Колонки: Дилер, Категория, Апр, Май, …, Мар. Категории: «Сервис», «Оборудование», «Расходные материалы».</p>
+              </div>
+              <input type="file" id="csv-input" accept=".csv,text/csv" class="hidden">
+              <button class="btn btn-primary" onclick="document.getElementById('csv-input').click()">Выбрать CSV</button>
+            </div>
+            <div class="data-row">
+              <div class="data-row-info">
+                <h4>Сохранить данные (JSON)</h4>
+                <p>Выгрузить текущее состояние (все дилеры + факты) в JSON-файл для резервной копии.</p>
+              </div>
+              <button class="btn" onclick="exportJSON()">Сохранить JSON</button>
+            </div>
+            <div class="data-row">
+              <div class="data-row-info">
+                <h4>Загрузить из JSON</h4>
+                <p>Восстановить состояние из ранее сохранённого JSON-файла.</p>
+              </div>
+              <input type="file" id="json-input" accept=".json,application/json" class="hidden">
+              <button class="btn" onclick="document.getElementById('json-input').click()">Выбрать JSON</button>
+            </div>
+            <div class="data-row">
+              <div class="data-row-info">
+                <h4>Сбросить к исходным данным</h4>
+                <p>Вернуть исходных дилеров и шкалы. Все ваши изменения будут потеряны.</p>
+              </div>
+              <button class="btn" onclick="resetData()" style="border-color: #fecaca; color: #b91c1c;">Сбросить</button>
+            </div>
+            <div class="data-row">
+              <div class="data-row-info">
+                <h4>Хранилище</h4>
+                <p id="storage-info">—</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer no-print">
+    <p>Расчёт скидок дилеров • Условия работы ТПС 2026 ф.г. • КОМПО</p>
+  </footer>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-// ─── Seed data (DEALERS + SCALES) ─────────────────────────────────────────────
-const SEED_DEALERS = [{"id": "novapak", "name": "НоваПак", "type": "РФ", "plan": {"service": 365000, "equipment": 787000, "materials": 660000}, "facts": {"service": [12619, 24628, 18488, null, null, null, null, null, null, null, null, null], "equipment": [null, 1435, 64423, null, null, null, null, null, null, null, null, null], "materials": [71293, 74870, 113044, null, null, null, null, null, null, null, null, null]}, "servicePercent": 17.0}, {"id": "ksp", "name": "КСП", "type": "РФ", "plan": {"service": 305000, "equipment": 999000, "materials": 800000}, "facts": {"service": [5683, 18745, 19978, null, null, null, null, null, null, null, null, null], "equipment": [null, 25178, 28036, null, null, null, null, null, null, null, null, null], "materials": [36210, 63105, 67403, null, null, null, null, null, null, null, null, null]}, "servicePercent": 15.0}, {"id": "bogatov", "name": "Богатов ТД", "type": "РФ", "plan": {"service": 100000, "equipment": 650000, "materials": 900000}, "facts": {"service": [14321, 16754, 15576, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [80234, 84520, 85982, null, null, null, null, null, null, null, null, null]}, "servicePercent": 15.0}, {"id": "kompo", "name": "КОМПО Технолоджис", "type": "РФ", "plan": {"service": 480438, "equipment": 2020594, "materials": 1641880}, "facts": {"service": [33874, 33700, 34068, null, null, null, null, null, null, null, null, null], "equipment": [null, 125140, 190275, null, null, null, null, null, null, null, null, null], "materials": [170011, 175678, 191343, null, null, null, null, null, null, null, null, null]}, "servicePercent": 19.0}, {"id": "abs", "name": "ABS", "type": "Заруб", "plan": {"service": 75000, "equipment": 700000, "materials": 400000}, "facts": {"service": [1420, null, null, null, null, null, null, null, null, null, null, null], "equipment": [47129, 47129, 47128, null, null, null, null, null, null, null, null, null], "materials": [50745, 50745, 50744, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "deling", "name": "Deling Food", "type": "Заруб", "plan": {"service": 75000, "equipment": 250000, "materials": 315000}, "facts": {"service": [12455, 12455, 12456, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [35124, 35124, 35125, null, null, null, null, null, null, null, null, null]}, "servicePercent": 15.0}, {"id": "vitline", "name": "VitLine", "type": "Заруб", "plan": {"service": 100000, "equipment": 315000, "materials": 900000}, "facts": {"service": [7597, 7597, 7596, null, null, null, null, null, null, null, null, null], "equipment": [15541, 15540, 15541, null, null, null, null, null, null, null, null, null], "materials": [53037, 53036, 53037, null, null, null, null, null, null, null, null, null]}, "servicePercent": 13.0}, {"id": "universal", "name": "Universal Meat", "type": "Заруб", "plan": {"service": 50000, "equipment": 200000, "materials": 250000}, "facts": {"service": [12754, 12754, 12754, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": 15.0}, {"id": "kna", "name": "KNA", "type": "Заруб", "plan": {"service": 50000, "equipment": 150000, "materials": 150000}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [1419, 1419, 1420, null, null, null, null, null, null, null, null, null], "materials": [18583, 18583, 18582, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}, {"id": "lucky", "name": "LUCKY & S CO", "type": "Заруб", "plan": {"service": 50000, "equipment": 400000, "materials": 150000}, "facts": {"service": [2442, 2442, 2442, null, null, null, null, null, null, null, null, null], "equipment": [5847, 5847, 5847, null, null, null, null, null, null, null, null, null], "materials": [6188, 6188, 6188, null, null, null, null, null, null, null, null, null]}, "servicePercent": 11.0}, {"id": "seitliyev", "name": "Сейитлиев", "type": "Заруб", "plan": {"service": 50000, "equipment": 75000, "materials": 560000}, "facts": {"service": [1505, 1505, 1506, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [32386, 32386, 32387, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "ingreda", "name": "Ingreda", "type": "Заруб", "plan": {"service": 0, "equipment": 75000, "materials": 130000}, "facts": {"service": [194, 195, 194, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [8653, 8653, 8653, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "clipsomac", "name": "CLIPSOMAC", "type": "Заруб", "plan": {"service": 0, "equipment": 0, "materials": 338375}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}, {"id": "tida", "name": "Tida Tech", "type": "Заруб", "plan": {"service": 3068, "equipment": 3578, "materials": 66004}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}, {"id": "kabiri", "name": "Кабири Хучанд", "type": "Заруб", "plan": {"service": 0, "equipment": 75000, "materials": 75000}, "facts": {"service": [174, 174, 175, null, null, null, null, null, null, null, null, null], "equipment": [7098, 7098, 7098, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "ari", "name": "Ari Makina", "type": "Заруб", "plan": {"service": 0, "equipment": 104744, "materials": 0}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}, {"id": "flexo", "name": "Flexo Food", "type": "Заруб", "plan": {"service": 0, "equipment": 75000, "materials": 75000}, "facts": {"service": [445, 445, 445, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [1722, 1722, 1721, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "ginap", "name": "ГИНАП", "type": "Заруб", "plan": {"service": 25000, "equipment": 75000, "materials": 75000}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}];
-const SEED_SCALES = [{"title": "Оборудование — за квартал", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Складские остатки (ретро)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок Оборудование", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}, {"component": "ИТОГО", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}]}, {"title": "Расходные материалы — за квартал", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Складские остатки Расход. мат.", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок Расход. мат.", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}, {"component": "ИТОГО", "values": ["1%", "2%", "3%", "4%", "5%", "6%"], "isTotal": true}]}, {"title": "Сервис (ЗЧ) — расчёт по парку оборудования", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Сервис + гарантия", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок", "values": ["7%", "9%", "10%", "11%", "12%", "13%"]}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}]}, {"title": "Система контроля (штрафы)", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объём закупок Расход. мат.", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}]}, {"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Складские остатки (ретро)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок Оборудование", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}, {"component": "ИТОГО", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}]}, {"title": "Расходные материалы — за полугодие", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Складские остатки Расход. мат.", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок Расход. мат.", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}, {"component": "ИТОГО", "values": ["1%", "2%", "3%", "4%", "5%", "6%"], "isTotal": true}]}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Сервис + гарантия", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок", "values": ["7%", "9%", "10%", "11%", "12%", "13%"]}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}]}];
+const SEED_STATE = {"quarter": 1, "dealers": [{"id": "кт", "name": "КОМПО Технолоджис", "type": "РФ", "plan": {"service": 480437.99999999994, "equipment": 2020593.75, "materials": 1641880.24}, "facts": {"service": {"months": [40270, 14831, 45947, 594, null, null, null, null, null, null, null, null]}, "equipment": {"months": [21220, 125695, 168500, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [155015, 160737, 221280, 33204, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за квартал", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "1 Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.1. Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.2. Сервисный центр - гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "2.3 Наличие минимальных складских остатков по оборудованию", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "3 Объем закупок МП", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}, {"component": "ИТОГО по МП:", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}], "period": "за квартал"}, {"title": "Расходные материалы — за квартал", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Наличие минимальных складских остатков по РМ (синхронизация отчета по остаткам с 1С КОМПО)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–500", "501–1000", "1001–1800", "1801–2400", "2401–3000", "от 3001"], "rows": [{"component": "% скидки", "values": ["0.19%", "0.21%", "0.23%", "0.25%", "0.27%", "0.3%"], "isTotal": false}]}, {"title": "Система контроля (штрафы)", "columns": ["Скидка будущих периодов квартала, %"], "rows": [{"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по МП (при наличии установленного показателя)", "values": ["1%"]}, {"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по РМ (при наличии установленного показателя)", "values": ["1%"]}, {"component": "за несвоевременное предоставление Скользящего прогноза", "values": ["0.5%"]}, {"component": "уменьшение бонуса за отказ от зарезервированного оборудования", "values": ["0.5%"]}, {"component": "Выполнение плановых показателей года ИТОГО", "values": ["1%"]}]}]}, {"id": "новапак", "name": "НоваПак", "type": "РФ", "plan": {"service": 365000, "equipment": 787000, "materials": 660000}, "facts": {"service": {"months": [12619, 24628, 18488, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, 1435, 64423, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [71293, 74870, 113044, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за квартал", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "1 Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.1. Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.2. Сервисный центр - гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "2.3 Наличие минимальных складских остатков по оборудованию", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "3 Объем закупок МП", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}, {"component": "ИТОГО по МП:", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}], "period": "за квартал"}, {"title": "Расходные материалы — за квартал", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Наличие минимальных складских остатков по РМ (синхронизация отчета по остаткам с 1С КОМПО)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–500", "501–1000", "1001–1800", "1801–2400", "2401–3000", "от 3001"], "rows": [{"component": "% скидки", "values": ["0.19%", "0.21%", "0.23%", "0.25%", "0.27%", "0.3%"], "isTotal": false}]}, {"title": "Система контроля (штрафы)", "columns": ["Скидка будущих периодов квартала, %"], "rows": [{"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по МП (при наличии установленного показателя)", "values": ["1%"]}, {"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по РМ (при наличии установленного показателя)", "values": ["1%"]}, {"component": "за несвоевременное предоставление Скользящего прогноза", "values": ["0.5%"]}, {"component": "уменьшение бонуса за отказ от зарезервированного оборудования", "values": ["0.5%"]}, {"component": "Выполнение плановых показателей года ИТОГО", "values": ["1%"]}]}]}, {"id": "ксп", "name": "КСП (КОМПО-СП)", "type": "РФ", "plan": {"service": 305000, "equipment": 999000, "materials": 800000}, "facts": {"service": {"months": [11603, 15918, 14574, 2311, null, null, null, null, null, null, null, null]}, "equipment": {"months": [15880, 9838, 27496, 28697, null, null, null, null, null, null, null, null]}, "materials": {"months": [33254, 54529, 78935, 1549, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за квартал", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "1 Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.1. Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.2. Сервисный центр - гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "2.3 Наличие минимальных складских остатков по оборудованию", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "3 Объем закупок МП", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}, {"component": "ИТОГО по МП:", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}], "period": "за квартал"}, {"title": "Расходные материалы — за квартал", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Наличие минимальных складских остатков по РМ (синхронизация отчета по остаткам с 1С КОМПО)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–500", "501–1000", "1001–1800", "1801–2400", "2401–3000", "от 3001"], "rows": [{"component": "% скидки", "values": ["0.19%", "0.21%", "0.23%", "0.25%", "0.27%", "0.3%"], "isTotal": false}]}, {"title": "Система контроля (штрафы)", "columns": ["Скидка будущих периодов квартала, %"], "rows": [{"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по МП (при наличии установленного показателя)", "values": ["1%"]}, {"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по РМ (при наличии установленного показателя)", "values": ["1%"]}, {"component": "за несвоевременное предоставление Скользящего прогноза", "values": ["0.5%"]}, {"component": "уменьшение бонуса за отказ от зарезервированного оборудования", "values": ["0.5%"]}, {"component": "Выполнение плановых показателей года ИТОГО", "values": ["1%"]}]}]}, {"id": "богатовъ-тех", "name": "Богатовъ технолоджис+ТД Богатов", "type": "РФ", "plan": {"service": 100000, "equipment": 650000, "materials": 900000}, "facts": {"service": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за квартал", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "1 Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.1. Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.2. Сервисный центр - гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "2.3 Наличие минимальных складских остатков по оборудованию", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "3 Объем закупок МП", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}, {"component": "ИТОГО по МП:", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}], "period": "за квартал"}, {"title": "Расходные материалы — за квартал", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Наличие минимальных складских остатков по РМ (синхронизация отчета по остаткам с 1С КОМПО)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–500", "501–1000", "1001–1800", "1801–2400", "2401–3000", "от 3001"], "rows": [{"component": "% скидки", "values": ["0.19%", "0.21%", "0.23%", "0.25%", "0.27%", "0.3%"], "isTotal": false}]}, {"title": "Система контроля (штрафы)", "columns": ["Скидка будущих периодов квартала, %"], "rows": [{"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по МП (при наличии установленного показателя)", "values": ["1%"]}, {"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по РМ (при наличии установленного показателя)", "values": ["1%"]}, {"component": "за несвоевременное предоставление Скользящего прогноза", "values": ["0.5%"]}, {"component": "уменьшение бонуса за отказ от зарезервированного оборудования", "values": ["0.5%"]}, {"component": "Выполнение плановых показателей года ИТОГО", "values": ["1%"]}]}]}, {"id": "тд-богатов", "name": "Богатовъ Торговый Дом, Челябинск", "type": "РФ", "plan": {"service": 75021.156, "equipment": 260000, "materials": 251079.7099999999}, "facts": {"service": {"months": [10883, 7847, 13229, 14692, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [47791, 60000, 142945, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за квартал", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "1 Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.1. Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.2. Сервисный центр - гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "2.3 Наличие минимальных складских остатков по оборудованию", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "3 Объем закупок МП", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}, {"component": "ИТОГО по МП:", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}], "period": "за квартал"}, {"title": "Расходные материалы — за квартал", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Наличие минимальных складских остатков по РМ (синхронизация отчета по остаткам с 1С КОМПО)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–500", "501–1000", "1001–1800", "1801–2400", "2401–3000", "от 3001"], "rows": [{"component": "% скидки", "values": ["0.19%", "0.21%", "0.23%", "0.25%", "0.27%", "0.3%"], "isTotal": false}]}, {"title": "Система контроля (штрафы)", "columns": ["Скидка будущих периодов квартала, %"], "rows": [{"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по МП (при наличии установленного показателя)", "values": ["1%"]}, {"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по РМ (при наличии установленного показателя)", "values": ["1%"]}, {"component": "за несвоевременное предоставление Скользящего прогноза", "values": ["0.5%"]}, {"component": "уменьшение бонуса за отказ от зарезервированного оборудования", "values": ["0.5%"]}, {"component": "Выполнение плановых показателей года ИТОГО", "values": ["1%"]}]}]}, {"id": "abs", "name": "ASIAN BUSINESS SOLUTIONS, Узбекистан", "type": "Заруб", "plan": {"service": 75000, "equipment": 700000, "materials": 400000}, "facts": {"service": {"months": [1420, null, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, 141386, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [80841, 20790, 50603, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "deling-fod", "name": "Deling food", "type": "Заруб", "plan": {"service": 75000, "equipment": 250000, "materials": 315000}, "facts": {"service": {"months": [20611, 16755, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [9773, null, 95600, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "vitline", "name": "VitLine, Казахстан", "type": "Заруб", "plan": {"service": 100000, "equipment": 315000, "materials": 900000}, "facts": {"service": {"months": [6205, 4533, 12052, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [46622, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [117813, 31872, 6178, 3247, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "universal-meat", "name": "UNIVERSAL MEAT", "type": "Заруб", "plan": {"service": 50000, "equipment": 200000, "materials": 250000}, "facts": {"service": {"months": [null, 35956, 2306, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "kna", "name": "КОМПО North America Inc", "type": "Заруб", "plan": {"service": 50000, "equipment": 150000, "materials": 150000}, "facts": {"service": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, 4258, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, 51404, 4344, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["0%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["7%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "lucky-s-co", "name": "LUCKY & S CO, Сербия", "type": "Заруб", "plan": {"service": 50000, "equipment": 400000, "materials": 150000}, "facts": {"service": {"months": [1968, null, 5358, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, 17541, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, null, 18564, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "сейитлиев", "name": "Сейитлиев Мердан Иламанович, Туркменистан", "type": "Заруб", "plan": {"service": 50000, "equipment": 75000, "materials": 560000}, "facts": {"service": {"months": [4516, null, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, 97159, null, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "ingreda", "name": "Ingreda, Молдова", "type": "Заруб", "plan": {"service": 0, "equipment": 75000, "materials": 130000}, "facts": {"service": {"months": [583, null, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [16733, null, 9226, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "clipsomac", "name": "CLIPSOMAC, Алжир", "type": "Заруб", "plan": {"service": 0, "equipment": 338375.4599999999, "materials": 0}, "facts": {"service": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["0%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}]}, {"id": "tida-tech", "name": "Tida Tech, Таиланд", "type": "Заруб", "plan": {"service": 3068.1166054346268, "equipment": 5927.731504545619, "materials": 66004.15189001977}, "facts": {"service": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["0%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}]}, {"id": "ari-makina", "name": "Ari Makina, Турция", "type": "Заруб", "plan": {"service": 75000, "equipment": 0, "materials": 0}, "facts": {"service": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["0%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}]}, {"id": "кабири-хучанд-ооо", "name": "Кабири Хучанд ООО, Таджикистан", "type": "Заруб", "plan": {"service": 0, "equipment": 75000, "materials": 75000}, "facts": {"service": {"months": [null, null, 523, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [21294, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "flexo-food-ltd-грузия", "name": "Flexo Food , Грузия", "type": "Заруб", "plan": {"service": 0, "equipment": 75000, "materials": 75000}, "facts": {"service": {"months": [null, 1335, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [5165, null, null, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}, {"id": "гинап-армения", "name": "Гинап, Армения", "type": "Заруб", "plan": {"service": 25000, "equipment": 75000, "materials": 75000}, "facts": {"service": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "equipment": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}, "materials": {"months": [null, null, null, null, null, null, null, null, null, null, null, null]}}, "servicePercent": null, "scales": [{"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "Наличие сервисного центра и гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок МП", "values": ["7%", "9%", "10%", "11%", "12%", "13%"], "isTotal": false}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}], "period": "за полугодие"}, {"title": "Расходные материалы — за квартал", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–7000", "7001–19000", "19001–24000", "24001–28000", "28001–40000", "40001–48000", "48001–60000", "60001–75000", "75001–90000", "90001–105000", "105001–115000", "от 115001"], "rows": [{"component": "% скидки", "values": ["0.1%", "0.11%", "0.13%", "0.14%", "0.15%", "0.16%", "0.17%", "0.18%", "0.19%", "0.2%", "0.21%", "0.22%"], "isTotal": false}]}]}], "scales": [{"title": "Оборудование — за квартал", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "1 Базовое вознаграждение за Дилерский договор", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.1. Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"], "isTotal": false}, {"component": "2.1.2. Сервисный центр - гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "2.3 Наличие минимальных складских остатков по оборудованию", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "3 Объем закупок МП", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}, {"component": "ИТОГО по МП:", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}], "period": "за квартал"}, {"title": "Расходные материалы — за квартал", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Наличие минимальных складских остатков по РМ (синхронизация отчета по остаткам с 1С КОМПО)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"], "isTotal": false}, {"component": "Объем закупок РМ", "values": ["0%", "1%", "2%", "3%", "4%", "5%"], "isTotal": false}], "period": "за квартал"}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["0–500", "501–1000", "1001–1800", "1801–2400", "2401–3000", "от 3001"], "rows": [{"component": "% скидки", "values": ["0.19%", "0.21%", "0.23%", "0.25%", "0.27%", "0.3%"], "isTotal": false}]}, {"title": "Система контроля (штрафы)", "columns": ["Скидка будущих периодов квартала, %"], "rows": [{"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по МП (при наличии установленного показателя)", "values": ["1%"]}, {"component": "уменьшение бонуса за невыполнение минимальных квартальных показателей закупок по РМ (при наличии установленного показателя)", "values": ["1%"]}, {"component": "за несвоевременное предоставление Скользящего прогноза", "values": ["0.5%"]}, {"component": "уменьшение бонуса за отказ от зарезервированного оборудования", "values": ["0.5%"]}, {"component": "Выполнение плановых показателей года ИТОГО", "values": ["1%"]}]}], "lastSync": "2026-07-07T10:26:40.557Z"};
 const MONTH_LABELS = ["Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек", "Янв", "Фев", "Мар"];
 
-// ─── State ────────────────────────────────────────────────────────────────────
-let state = {
-  quarter: 1,
-  dealers: JSON.parse(JSON.stringify(SEED_DEALERS)),
-  scales: JSON.parse(JSON.stringify(SEED_SCALES)),
-};
+let state = JSON.parse(JSON.stringify(SEED_STATE));
+if (!state.quarter) state.quarter = 1;
 
-const STORAGE_KEY = 'kompo-discount-calc-v1';
+const STORAGE_KEY = 'kompo-discount-calc-v3';
 
 function saveState() {
   try {
@@ -350,20 +603,15 @@ function updateStorageInfo() {
   const dealersCount = state.dealers.length;
   const hasSaved = localStorage.getItem(STORAGE_KEY) !== null;
   el.textContent = hasSaved
-    ? `${dealersCount} дилеров в памяти браузера (${(size/1024).toFixed(1)} KB)`
+    ? dealersCount + ' дилеров в памяти браузера (' + (size/1024).toFixed(1) + ' KB)'
     : 'несохранённые данные';
 }
 
-// ─── Calc helpers (ported from src/lib/calc.ts) ───────────────────────────────
+// ─── Calc helpers ─────────────────────────────────────────────────────────────
 function sumYear(values) {
   const filtered = values.filter(v => v !== null);
   if (filtered.length === 0) return null;
   return filtered.reduce((a,b) => a+b, 0);
-}
-
-function sumQuarter(values, q) {
-  const start = (q-1)*3;
-  return sumYear(values.slice(start, start+3));
 }
 
 function hasFacts(values) {
@@ -378,9 +626,9 @@ function quarterlyFactsByCategory(dealer, q) {
     return slice.reduce((a,b) => a + (b ?? 0), 0);
   };
   return {
-    service: pick(dealer.facts.service),
-    equipment: pick(dealer.facts.equipment),
-    materials: pick(dealer.facts.materials),
+    service: pick(dealer.facts.service.months || dealer.facts.service),
+    equipment: pick(dealer.facts.equipment.months || dealer.facts.equipment),
+    materials: pick(dealer.facts.materials.months || dealer.facts.materials),
   };
 }
 
@@ -392,9 +640,9 @@ function halfYearFactsByCategory(dealer, q) {
     return slice.reduce((a,b) => a + (b ?? 0), 0);
   };
   return {
-    service: pick(dealer.facts.service),
-    equipment: pick(dealer.facts.equipment),
-    materials: pick(dealer.facts.materials),
+    service: pick(dealer.facts.service.months || dealer.facts.service),
+    equipment: pick(dealer.facts.equipment.months || dealer.facts.equipment),
+    materials: pick(dealer.facts.materials.months || dealer.facts.materials),
   };
 }
 
@@ -413,7 +661,7 @@ function serviceFactAccumulated(dealer) {
   return sumYear(dealer.facts.service.months || dealer.facts.service);
 }
 
-// ─── Discount calc (ported from src/lib/discount.ts) ──────────────────────────
+// ─── Discount calc (uses per-dealer scales if available, else global scales) ─
 const MIN_EQUIPMENT_DISCOUNT_PCT = 14;
 
 function parseTier(col) {
@@ -452,6 +700,11 @@ function findTierColumn(columns, volume) {
   return columns.length - 1;
 }
 
+function getDealerScales(dealer) {
+  // Use per-dealer scales if available, else fall back to global state.scales
+  return (dealer.scales && dealer.scales.length > 0) ? dealer.scales : state.scales;
+}
+
 function findScaleTable(scales, titlePart) {
   if (!scales || scales.length === 0) return null;
   const lc = titlePart.toLowerCase();
@@ -465,8 +718,8 @@ function findTotalRow(table) {
 }
 
 function calcEquipmentDiscountPct(dealer, quarter) {
-  // Use SEED_SCALES (no per-dealer scales in this static build)
-  const table = findScaleTable(state.scales, 'Оборудование');
+  const scales = getDealerScales(dealer);
+  const table = findScaleTable(scales, 'Оборудование');
   if (!table) return null;
   let equipmentFact;
   if (dealer.type === 'Заруб') {
@@ -497,7 +750,8 @@ function calcEquipmentDiscountPct(dealer, quarter) {
 }
 
 function calcMaterialsDiscountPctSplit(dealer, quarter) {
-  const table = findScaleTable(state.scales, 'Расходные');
+  const scales = getDealerScales(dealer);
+  const table = findScaleTable(scales, 'Расходные');
   if (!table) return { volume: null, minStock: null };
   let materialsFact;
   if (dealer.type === 'Заруб') {
@@ -525,8 +779,9 @@ function calcMaterialsDiscountPctSplit(dealer, quarter) {
 }
 
 function calcServiceDiscountPct(dealer, quarter) {
+  const scales = getDealerScales(dealer);
   if (dealer.type === 'РФ') {
-    const eqTable = findScaleTable(state.scales, 'Оборудование');
+    const eqTable = findScaleTable(scales, 'Оборудование');
     if (!eqTable) return null;
     const facts = quarterlyFactsByCategory(dealer, quarter);
     const hasAny = facts.service !== null || facts.equipment !== null || facts.materials !== null;
@@ -542,8 +797,7 @@ function calcServiceDiscountPct(dealer, quarter) {
     }
     return null;
   }
-  // Заруб: use service scale
-  const table = findScaleTable(state.scales, 'Сервис');
+  const table = findScaleTable(scales, 'Сервис');
   if (!table) return null;
   const fact = serviceFactAccumulated(dealer);
   if (fact === null || fact === 0) return null;
@@ -560,7 +814,7 @@ function getServiceDiscountPctNormalized(dealer, quarter) {
   return pct < 1 ? pct * 100 : pct;
 }
 
-// ─── Format helpers ───────────────────────────────────────────────────────────
+// ─── Format helpers ──────────────────────────────────────────────────────────
 function fmt(n, suffix = '') {
   if (n === null || n === undefined) return '—';
   const rounded = Math.round(n);
@@ -576,16 +830,15 @@ function fmtPct(n, digits = 1) {
 }
 
 function quarterMonthRange(q) {
-  const start = (q-1)*3;
-  return MONTH_LABELS[start] + '–' + MONTH_LABELS[start+2];
+  const ranges = ['', 'апр–июн', 'июл–сен', 'окт–дек', 'янв–мар'];
+  return ranges[q];
 }
 
 function halfYearMonthRange(q) {
-  if (q <= 2) return MONTH_LABELS[0] + '–' + MONTH_LABELS[5];
-  return MONTH_LABELS[6] + '–' + MONTH_LABELS[11];
+  return q <= 2 ? 'апр–сен' : 'окт–мар';
 }
 
-// ─── Sorting state ────────────────────────────────────────────────────────────
+// ─── Sorting ─────────────────────────────────────────────────────────────────
 let summarySort = { key: 'name', dir: 'asc' };
 let serviceSort = { key: 'name', dir: 'asc' };
 
@@ -601,13 +854,13 @@ function cmpStr(a, b, dir) {
   return dir === 'asc' ? r : -r;
 }
 
-// ─── Rendering ────────────────────────────────────────────────────────────────
+// ─── Tab switching ───────────────────────────────────────────────────────────
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
   document.getElementById('tab-' + name).classList.remove('hidden');
   if (name === 'scales') renderScales();
-  if (name === 'dealer') renderDealerCard();
+  if (name === 'dealer') renderDealerTab();
 }
 
 function rerender() {
@@ -615,40 +868,15 @@ function rerender() {
   renderSummary();
   renderService();
   if (!document.getElementById('tab-scales').classList.contains('hidden')) renderScales();
-  if (!document.getElementById('tab-dealer').classList.contains('hidden')) renderDealerCard();
+  if (!document.getElementById('tab-dealer').classList.contains('hidden')) renderDealerTab();
   saveState();
 }
 
 function renderSummary() {
   const q = state.quarter;
   document.getElementById('summary-sub').textContent =
-    `РФ: за ${q} кв. (${quarterMonthRange(q)}) • Заруб: за ${q <= 2 ? 1 : 2} п/г (${halfYearMonthRange(q)})`;
+    'РФ: за ' + q + ' кв. (' + quarterMonthRange(q) + ') • Заруб: за ' + (q <= 2 ? 1 : 2) + ' п/г (' + halfYearMonthRange(q) + ')';
 
-  // KPIs
-  const rfDealers = state.dealers.filter(d => d.type === 'РФ');
-  const foreignDealers = state.dealers.filter(d => d.type === 'Заруб');
-  const planTotal = state.dealers.reduce((s, d) =>
-    s + effectivePlanTotal(d, q), 0);
-  const factTotal = state.dealers.reduce((s, d) => {
-    const f = effectiveFactsByCategory(d, q);
-    const has = f.service !== null || f.equipment !== null || f.materials !== null;
-    return s + (has ? (f.service ?? 0) + (f.equipment ?? 0) + (f.materials ?? 0) : 0);
-  }, 0);
-  const withFacts = state.dealers.filter(d => {
-    const f = effectiveFactsByCategory(d, q);
-    return f.service !== null || f.equipment !== null || f.materials !== null;
-  }).length;
-  const execPct = planTotal > 0 ? Math.round((factTotal / planTotal) * 100) : 0;
-
-  document.getElementById('kpi-row').innerHTML = `
-    <div class="kpi"><div class="kpi-label">РФ дилеров</div><div class="kpi-value">${rfDealers.length}</div><div class="kpi-sub">российские</div></div>
-    <div class="kpi"><div class="kpi-label">Заруб дилеров</div><div class="kpi-value">${foreignDealers.length}</div><div class="kpi-sub">зарубежные</div></div>
-    <div class="kpi"><div class="kpi-label">План</div><div class="kpi-value">${fmt(planTotal, ' €')}</div><div class="kpi-sub">за период</div></div>
-    <div class="kpi"><div class="kpi-label">Факт</div><div class="kpi-value">${fmt(factTotal, ' €')}</div><div class="kpi-sub">за период</div></div>
-    <div class="kpi"><div class="kpi-label">Выполнение</div><div class="kpi-value">${execPct}%</div><div class="kpi-sub">${withFacts} с данными</div></div>
-  `;
-
-  // Build rows
   const rows = state.dealers.map(d => {
     const plan = effectivePlanTotal(d, q) ?? 0;
     const facts = effectiveFactsByCategory(d, q);
@@ -664,7 +892,6 @@ function renderSummary() {
     return { d, plan, facts, factTotal, execPct, eqPlan, matPlan, eqPct, matVolPct: matSplit.volume, matMinPct: matSplit.minStock };
   });
 
-  // Sort
   const { key, dir } = summarySort;
   rows.sort((a, b) => {
     switch (key) {
@@ -683,31 +910,33 @@ function renderSummary() {
     }
   });
 
-  // Render
   const table = document.getElementById('summary-table');
   const sortInd = (k) => {
-    if (summarySort.key !== k) return '<span class="sort-ind">⇅</span>';
-    return `<span class="sort-ind">${dir === 'asc' ? '▲' : '▼'}</span>`;
+    if (summarySort.key !== k) return '<span class="sort-ind"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 9 12 5 16 9"/><polyline points="8 15 12 19 16 15"/></svg></span>';
+    return '<span class="sort-ind active">' + (dir === 'asc'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>') + '</span>';
   };
   const head = (k, label, cls = '') =>
-    `<th class="sortable ${summarySort.key === k ? 'active' : ''} ${cls}" onclick="toggleSummarySort('${k}')">${label}${sortInd(k)}</th>`;
+    '<th class="sortable ' + (summarySort.key === k ? 'active' : '') + ' ' + cls + '" onclick="toggleSummarySort(\'' + k + '\')">' + label + sortInd(k) + '</th>';
 
   table.innerHTML = `
     <colgroup>
       <col style="width:16%"><col style="width:4%"><col style="width:8%"><col style="width:8%"><col style="width:5%">
       <col style="width:8%"><col style="width:8%"><col style="width:7%">
-      <col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:7%">
+      <col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:7%"><col style="width:4%">
     </colgroup>
     <thead>
       <tr>
-        ${head('name', 'Дилер', 'cat')} ${head('type', 'Тип', 'text-center')} ${head('plan', 'План')} ${head('fact', 'Факт')} ${head('exec', 'Вып.', 'text-center')}
-        <th colspan="3" class="text-center green-cell-strong">Оборудование</th>
-        <th colspan="4" class="text-center green-cell-strong">Расходные материалы</th>
+        ${head('name', 'Дилер', 'left')} ${head('type', 'Тип', 'center')} ${head('plan', 'План')} ${head('fact', 'Факт')} ${head('exec', 'Вып.', 'center')}
+        <th class="group-head" colspan="3">Оборудование</th>
+        <th class="group-head" colspan="4">Расходные материалы</th>
+        <th class="center" rowspan="2">Печать</th>
       </tr>
       <tr>
         <th colspan="5"></th>
-        ${head('eqPlan', 'План', 'green-cell')} ${head('eqFact', 'Факт', 'green-cell')} ${head('eqPct', 'Скид. %', 'green-cell')}
-        ${head('matPlan', 'План', 'green-cell')} ${head('matFact', 'Факт', 'green-cell')} ${head('matVolPct', 'Скид. % (объём)', 'green-cell')} ${head('matMinPct', 'Скид. % (мин. ост.)', 'green-cell')}
+        ${head('eqPlan', 'План', 'sub-head')} ${head('eqFact', 'Факт', 'sub-head')} ${head('eqPct', 'Скид. %', 'sub-head')}
+        ${head('matPlan', 'План', 'sub-head')} ${head('matFact', 'Факт', 'sub-head')} ${head('matVolPct', 'Скид. % (объём)', 'sub-head')} ${head('matMinPct', 'Скид. % (мин. ост.)', 'sub-head')}
       </tr>
     </thead>
     <tbody>
@@ -715,20 +944,21 @@ function renderSummary() {
         const d = r.d;
         const noData = r.factTotal === null;
         const period = d.type === 'Заруб' ? 'пг' : 'кв';
-        return `<tr class="${noData ? 'no-data' : ''}">
-          <td class="cat" title="${d.name}">${d.name}</td>
-          <td class="text-center"><span class="badge ${d.type === 'РФ' ? 'badge-rf' : 'badge-zarub'}">${d.type}</span></td>
-          <td>${r.plan === 0 ? '—' : fmt(r.plan) + ' / ' + period}</td>
-          <td>${r.factTotal === null ? 'нет' : fmt(r.factTotal) + ' / ' + period}</td>
-          <td class="text-center">${r.execPct === null ? '—' : r.execPct + '%'}</td>
-          <td class="green-cell">${fmt(Math.round(r.eqPlan), ' €')}</td>
-          <td class="green-cell">${fmt(r.facts.equipment, ' €')}</td>
-          <td class="green-cell discount">${fmtPct(r.eqPct)}</td>
-          <td class="green-cell">${fmt(Math.round(r.matPlan), ' €')}</td>
-          <td class="green-cell">${fmt(r.facts.materials, ' €')}</td>
-          <td class="green-cell discount">${fmtPct(r.matVolPct)}</td>
-          <td class="green-cell discount">${fmtPct(r.matMinPct)}</td>
-        </tr>`;
+        return '<tr class="' + (noData ? 'no-data' : '') + '">' +
+          '<td class="left font-medium" title="' + d.name + '">' + d.name + '</td>' +
+          '<td class="center"><span class="badge ' + (d.type === 'РФ' ? 'badge-rf' : 'badge-zarub') + '">' + d.type + '</span></td>' +
+          '<td class="tabular-nums">' + (r.plan === 0 ? '—' : fmt(r.plan) + ' / ' + period) + '</td>' +
+          '<td class="tabular-nums">' + (r.factTotal === null ? 'нет' : fmt(r.factTotal) + ' / ' + period) + '</td>' +
+          '<td class="center tabular-nums font-medium">' + (r.execPct === null ? '—' : r.execPct + '%') + '</td>' +
+          '<td class="tabular-nums equipment-cell border-left">' + fmt(Math.round(r.eqPlan), ' €') + '</td>' +
+          '<td class="tabular-nums equipment-cell">' + fmt(r.facts.equipment, ' €') + '</td>' +
+          '<td class="tabular-nums discount-eq">' + fmtPct(r.eqPct) + '</td>' +
+          '<td class="tabular-nums equipment-cell border-left">' + fmt(Math.round(r.matPlan), ' €') + '</td>' +
+          '<td class="tabular-nums equipment-cell">' + fmt(r.facts.materials, ' €') + '</td>' +
+          '<td class="tabular-nums discount-mat">' + fmtPct(r.matVolPct) + '</td>' +
+          '<td class="tabular-nums discount-mat border-right">' + fmtPct(r.matMinPct) + '</td>' +
+          '<td class="center no-print"><button class="print-btn" onclick="printDealer(\'' + d.id + '\')" title="Печать карточки: ' + d.name + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button></td>' +
+        '</tr>';
       }).join('')}
     </tbody>
   `;
@@ -764,11 +994,13 @@ function renderService() {
 
   const table = document.getElementById('service-table');
   const sortInd = (k) => {
-    if (serviceSort.key !== k) return '<span class="sort-ind">⇅</span>';
-    return `<span class="sort-ind">${dir === 'asc' ? '▲' : '▼'}</span>`;
+    if (serviceSort.key !== k) return '<span class="sort-ind"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 9 12 5 16 9"/><polyline points="8 15 12 19 16 15"/></svg></span>';
+    return '<span class="sort-ind active">' + (dir === 'asc'
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>') + '</span>';
   };
   const head = (k, label, cls = '') =>
-    `<th class="sortable ${serviceSort.key === k ? 'active' : ''} ${cls}" onclick="toggleServiceSort('${k}')">${label}${sortInd(k)}</th>`;
+    '<th class="sortable ' + (serviceSort.key === k ? 'active' : '') + ' ' + cls + '" onclick="toggleServiceSort(\'' + k + '\')">' + label + sortInd(k) + '</th>';
 
   table.innerHTML = `
     <colgroup>
@@ -776,23 +1008,23 @@ function renderService() {
     </colgroup>
     <thead>
       <tr>
-        ${head('name', 'Дилер', 'cat')} ${head('type', 'Тип', 'text-center')}
+        ${head('name', 'Дилер', 'left')} ${head('type', 'Тип', 'center')}
         ${head('svcPlan', 'План Сервис (год)')} ${head('svcFact', 'Факт Сервис (накопл.)')}
-        ${head('svcExec', 'Выполн.', 'text-center')} ${head('svcPct', 'Сервис %', 'discount-violet')}
+        ${head('svcExec', 'Выполн.', 'center')} ${head('svcPct', 'Сервис %')}
       </tr>
     </thead>
     <tbody>
       ${rows.map(r => {
         const d = r.d;
         const noData = r.sf === null;
-        return `<tr class="${noData ? 'no-data' : ''}">
-          <td class="cat" title="${d.name}">${d.name}</td>
-          <td class="text-center"><span class="badge ${d.type === 'РФ' ? 'badge-rf' : 'badge-zarub'}">${d.type}</span></td>
-          <td>${fmt(r.sp)}</td>
-          <td>${r.sf === null ? 'нет' : fmt(r.sf)}</td>
-          <td class="text-center">${r.exec === null ? '—' : r.exec + '%'}</td>
-          <td class="discount-violet">${fmtPct(r.pct)}</td>
-        </tr>`;
+        return '<tr class="' + (noData ? 'no-data' : '') + '">' +
+          '<td class="left font-medium" title="' + d.name + '">' + d.name + '</td>' +
+          '<td class="center"><span class="badge ' + (d.type === 'РФ' ? 'badge-rf' : 'badge-zarub') + '">' + d.type + '</span></td>' +
+          '<td class="tabular-nums">' + fmt(r.sp) + '</td>' +
+          '<td class="tabular-nums">' + (r.sf === null ? 'нет' : fmt(r.sf)) + '</td>' +
+          '<td class="center tabular-nums font-medium">' + (r.exec === null ? '—' : r.exec + '%') + '</td>' +
+          '<td class="tabular-nums discount-violet">' + fmtPct(r.pct) + '</td>' +
+        '</tr>';
       }).join('')}
     </tbody>
   `;
@@ -804,23 +1036,21 @@ function toggleServiceSort(k) {
   renderService();
 }
 
-function populateDealerSelect() {
-  const sel = document.getElementById('dealer-select');
-  sel.innerHTML = state.dealers.map(d =>
-    `<option value="${d.id}">${d.name} (${d.type})</option>`
+function populateDealerSelects() {
+  const opts = state.dealers.map(d =>
+    '<option value="' + d.id + '">' + d.name + ' (' + d.type + ')</option>'
   ).join('');
+  document.getElementById('dealer-select').innerHTML = opts;
+  document.getElementById('scales-dealer-select').innerHTML = opts;
 }
 
 function renderScales() {
-  const dealerId = document.getElementById('dealer-select').value;
+  const dealerId = document.getElementById('scales-dealer-select').value;
   const dealer = state.dealers.find(d => d.id === dealerId) ?? state.dealers[0];
-  document.getElementById('scales-dealer-name').textContent =
-    dealer.name + ' (' + dealer.type + ')';
+  document.getElementById('scales-dealer-name').textContent = dealer.name + ' (' + dealer.type + ')';
 
   const q = state.quarter;
-  const body = document.getElementById('scales-body');
-
-  // Determine active columns
+  const scales = getDealerScales(dealer);
   const eqFact = dealer.type === 'Заруб'
     ? halfYearFactsByCategory(dealer, q).equipment
     : quarterlyFactsByCategory(dealer, q).equipment;
@@ -829,33 +1059,61 @@ function renderScales() {
     : quarterlyFactsByCategory(dealer, q).materials;
   const svcFact = serviceFactAccumulated(dealer);
 
-  const eqScale = findScaleTable(state.scales, 'Оборудование');
-  const matScale = findScaleTable(state.scales, 'Расходные');
-  const svcScale = findScaleTable(state.scales, 'Сервис');
+  const eqScale = findScaleTable(scales, 'Оборудование');
+  const matScale = findScaleTable(scales, 'Расходные');
+  const svcScale = findScaleTable(scales, 'Сервис');
+  const ctrlScale = findScaleTable(scales, 'контроля');
 
   const eqColIdx = eqFact === null ? -1 : findTierColumn(eqScale.columns, eqFact / 1000);
   const matColIdx = matFact === null ? -1 : findTierColumn(matScale.columns, matFact / 1000);
   const svcColIdx = svcFact === null || svcFact === 0 ? -1 : findTierColumn(svcScale.columns, svcFact);
 
-  const renderScale = (s, activeIdx, factLabel, factValue) => {
-    if (!s) return '<p class="empty-state">Шкала не найдена</p>';
+  const eqPct = calcEquipmentDiscountPct(dealer, q);
+  const matSplit = calcMaterialsDiscountPctSplit(dealer, q);
+  const svcPct = getServiceDiscountPctNormalized(dealer, q);
+
+  document.getElementById('scales-stats').innerHTML = `
+    <div class="scale-stat scale-stat-eq">
+      <div class="scale-stat-title">Оборудование</div>
+      <div class="scale-stat-value">${fmtPct(eqPct)}</div>
+      <div class="text-xs text-muted">Факт: ${fmt(eqFact, ' €')}</div>
+    </div>
+    <div class="scale-stat scale-stat-mat">
+      <div class="scale-stat-title">Расходные материалы</div>
+      <div class="scale-stat-value">${fmtPct(matSplit.volume)}</div>
+      <div class="text-xs text-muted">Мин. ост.: ${fmtPct(matSplit.minStock)} • Факт: ${fmt(matFact, ' €')}</div>
+    </div>
+    <div class="scale-stat scale-stat-svc">
+      <div class="scale-stat-title">Сервис (12 мес.)</div>
+      <div class="scale-stat-value">${fmtPct(svcPct)}</div>
+      <div class="text-xs text-muted">Факт: ${fmt(svcFact, ' €')}</div>
+    </div>
+    <div class="scale-stat scale-stat-ctrl">
+      <div class="scale-stat-title">Система контроля</div>
+      <div class="scale-stat-value">—</div>
+      <div class="text-xs text-muted">Штрафы не рассчитываются</div>
+    </div>
+  `;
+
+  const renderScale = (s, activeIdx, kind, factLabel, factValue) => {
+    if (!s) return '<p class="text-muted">Шкала не найдена</p>';
     const cols = s.columns.map((c, i) =>
-      `<th class="${i === activeIdx ? 'active-col' : ''}">${c}</th>`
+      '<th class="' + (i === activeIdx ? 'active-col' : '') + '">' + c + '</th>'
     ).join('');
     const rows = s.rows.map(r => {
       const isTotal = r.isTotal || r.component.toLowerCase().includes('итого');
       const cells = r.values.map((v, i) =>
-        `<td class="${i === activeIdx ? 'active-col' : ''}">${v}</td>`
+        '<td class="' + (i === activeIdx ? 'active-col' : '') + '">' + v + '</td>'
       ).join('');
-      return `<tr class="${isTotal ? 'total-row' : ''}"><td class="cat">${r.component}</td>${cells}</tr>`;
+      // Shorten component name (remove leading "1 ", "2.1.1. " etc.)
+      const shortName = r.component.replace(/^(\d+(\.\d+)*[\.\)]\s*)/, '');
+      return '<tr class="' + (isTotal ? 'total-row' : '') + '"><td class="cat">' + shortName + '</td>' + cells + '</tr>';
     }).join('');
     return `
       <div class="scale-block">
         <h3>${s.title}</h3>
-        <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 6px;">
-          ${factLabel}: <b>${factValue}</b>
-        </div>
-        <table class="scale-table">
+        <div class="sub">${factLabel}: <b>${factValue}</b></div>
+        <table class="scale-table scale-table-${kind}">
           <thead><tr><th class="cat">Компонент</th>${cols}</tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -863,129 +1121,152 @@ function renderScales() {
     `;
   };
 
-  body.innerHTML =
-    renderScale(eqScale, eqColIdx, 'Факт (за период)', fmt(eqFact, ' €') + ' → ' + (eqFact === null ? 'нет данных' : (eqFact/1000).toFixed(1) + ' тыс. €')) +
-    renderScale(matScale, matColIdx, 'Факт (за период)', fmt(matFact, ' €') + ' → ' + (matFact === null ? 'нет данных' : (matFact/1000).toFixed(1) + ' тыс. €')) +
-    renderScale(svcScale, svcColIdx, 'Факт (накопл. 12 мес.)', fmt(svcFact, ' €'));
+  document.getElementById('scales-body').innerHTML =
+    renderScale(eqScale, eqColIdx, 'eq', 'Факт (за период)', fmt(eqFact, ' €') + ' → ' + (eqFact === null ? 'нет данных' : (eqFact/1000).toFixed(1) + ' тыс. €')) +
+    renderScale(matScale, matColIdx, 'mat', 'Факт (за период)', fmt(matFact, ' €') + ' → ' + (matFact === null ? 'нет данных' : (matFact/1000).toFixed(1) + ' тыс. €')) +
+    renderScale(svcScale, svcColIdx, 'svc', 'Факт (накопл. 12 мес.)', fmt(svcFact, ' €')) +
+    renderScale(ctrlScale, -1, 'ctrl', 'Штрафы', 'не рассчитываются');
 }
 
-function renderDealerCard() {
+function renderDealerTab() {
   const dealerId = document.getElementById('dealer-select').value;
   const d = state.dealers.find(d => d.id === dealerId) ?? state.dealers[0];
+  document.getElementById('dealer-tab-title').textContent = d.name + ' — помесячные отгрузки';
+
   const q = state.quarter;
-  const body = document.getElementById('dealer-body');
-
-  const planEq = d.plan.equipment, planMat = d.plan.materials, planSvc = d.plan.service;
-  const planTotal = planEq + planMat + planSvc;
-  const factEq = sumYear(d.facts.equipment) ?? 0;
-  const factMat = sumYear(d.facts.materials) ?? 0;
-  const factSvc = sumYear(d.facts.service) ?? 0;
+  const planTotal = d.plan.equipment + d.plan.materials + d.plan.service;
+  const factEq = sumYear(d.facts.equipment.months || d.facts.equipment) ?? 0;
+  const factMat = sumYear(d.facts.materials.months || d.facts.materials) ?? 0;
+  const factSvc = sumYear(d.facts.service.months || d.facts.service) ?? 0;
   const factTotal = factEq + factMat + factSvc;
-
   const isZarub = d.type === 'Заруб';
   const qf = isZarub ? halfYearFactsByCategory(d, q) : quarterlyFactsByCategory(d, q);
-  const qFactEq = qf.equipment ?? 0;
-  const qFactMat = qf.materials ?? 0;
-  const qFactSvc = qf.service ?? 0;
-
-  const periodLabel = isZarub
-    ? `за ${q <= 2 ? 1 : 2} п/г (${quarterMonthRange(q)}) — накопительно до ${q} кв.`
-    : `за ${q} кв. (${quarterMonthRange(q)})`;
 
   const eqPct = calcEquipmentDiscountPct(d, q);
   const matSplit = calcMaterialsDiscountPctSplit(d, q);
   const svcPct = getServiceDiscountPctNormalized(d, q);
 
-  const monthlyRow = (label, months) => {
+  const eqMonths = d.facts.equipment.months || d.facts.equipment;
+  const matMonths = d.facts.materials.months || d.facts.materials;
+  const svcMonths = d.facts.service.months || d.facts.service;
+
+  const buildRow = (label, months, colorClass, isQuarter=false) => {
     const total = sumYear(months) ?? 0;
-    const cells = months.map(v => v === null ? '<td class="empty">—</td>' : `<td>${fmt(v, '')}</td>`).join('');
-    return `<tr><td class="cat">${label}</td>${cells}<td class="total">${fmt(total, '')}</td></tr>`;
+    const cells = months.map(v => v === null ? '<td class="empty">—</td>' : '<td>' + fmt(v, '') + '</td>').join('');
+    return '<tr' + (isQuarter ? ' class="q-row"' : '') + '><td class="cat" style="color:' + colorClass + '">' + label + '</td>' + cells + '<td class="total">' + fmt(total, '') + '</td></tr>';
   };
 
+  const planRow = (label) => {
+    const cells = MONTH_LABELS.map(() => '<td class="empty">—</td>').join('');
+    return '<tr class="q-row"><td class="cat">' + label + '</td>' + cells + '<td class="total">' + fmt(planTotal, '') + '</td></tr>';
+  };
+
+  const body = document.getElementById('dealer-body');
   body.innerHTML = `
-    <div style="background: var(--green-bg); border: 1px solid var(--green-border); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px;">
-      <b style="color: var(--green-text);">${d.name}</b>
-      <span style="margin-left: 12px; color: #475569;">План: ${fmt(planTotal, ' €')}</span>
-      <span style="margin-left: 12px; color: #475569;">Выручка: ${fmt(factTotal, ' €')}</span>
-      <span style="margin-left: 12px; color: #475569;">Тип: ${d.type}</span>
+    <div class="dealer-info">
+      <span class="name">${d.name}</span>
+      <span class="kpi">План: ${fmt(planTotal, ' €')}</span>
+      <span class="kpi">Выручка (факт): ${fmt(factTotal, ' €')}</span>
+      <span class="kpi">Тип: ${d.type}</span>
+      <span class="kpi">Скидка Оборуд.: ${fmtPct(eqPct)}</span>
+      <span class="kpi">Скидка РМ (объём): ${fmtPct(matSplit.volume)}</span>
+      <span class="kpi">Скидка Сервис: ${fmtPct(svcPct)}</span>
     </div>
 
-    <h3 style="font-size: 13px; color: var(--head-text); margin: 14px 0 6px;">Категории — план / факт / выполнение / скидка (${periodLabel})</h3>
-    <table class="scale-table" style="font-size: 11px;">
+    <table class="monthly">
       <thead>
         <tr>
-          <th class="cat">Категория</th>
-          <th>План год</th>
-          <th>Факт год</th>
-          <th>Факт ${q} кв.</th>
-          <th>Скидка % (объём)</th>
-          <th>Скидка % (мин. ост.)</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td class="cat">Оборудование</td>
-          <td>${fmt(planEq, ' €')}</td>
-          <td>${fmt(factEq, ' €')}</td>
-          <td>${fmt(qFactEq, ' €')}</td>
-          <td style="background: var(--green-bg); color: var(--green-text); font-weight: 700;">${fmtPct(eqPct)}</td>
-          <td style="background: var(--green-bg); color: var(--green-text); font-weight: 700;">—</td>
-        </tr>
-        <tr>
-          <td class="cat">Расход. мат.</td>
-          <td>${fmt(planMat, ' €')}</td>
-          <td>${fmt(factMat, ' €')}</td>
-          <td>${fmt(qFactMat, ' €')}</td>
-          <td style="background: var(--green-bg); color: var(--green-text); font-weight: 700;">${fmtPct(matSplit.volume)}</td>
-          <td style="background: var(--green-bg); color: var(--green-text); font-weight: 700;">${fmtPct(matSplit.minStock)}</td>
-        </tr>
-        <tr class="total-row">
-          <td class="cat">Итого</td>
-          <td>${fmt(planEq + planMat, ' €')}</td>
-          <td>${fmt(factEq + factMat, ' €')}</td>
-          <td>${fmt(qFactEq + qFactMat, ' €')}</td>
-          <td>${eqPct !== null && matSplit.volume !== null ? fmtPct(eqPct + matSplit.volume) : '—'}</td>
-          <td>${fmtPct(matSplit.minStock)}</td>
-        </tr>
-        <tr>
-          <td class="cat">Сервис</td>
-          <td>${fmt(planSvc, ' €')}</td>
-          <td>${factSvc > 0 ? fmt(factSvc, ' €') : '—'}</td>
-          <td>${fmt(qFactSvc, ' €')}</td>
-          <td style="background: var(--violet-bg); color: var(--violet-text); font-weight: 700;">${fmtPct(svcPct)}</td>
-          <td>—</td>
-        </tr>
-      </tbody>
-    </table>
-
-    <h3 style="font-size: 13px; color: var(--head-text); margin: 14px 0 6px;">Помесячные отгрузки (Апр → Мар)</h3>
-    <table class="monthly-table">
-      <thead>
-        <tr>
-          <th class="cat">Категория</th>
-          ${MONTH_LABELS.map(m => `<th>${m}</th>`).join('')}
+          <th class="cat">Период</th>
+          ${MONTH_LABELS.map(m => '<th>' + m + '</th>').join('')}
           <th class="total">Итог</th>
         </tr>
       </thead>
       <tbody>
-        ${monthlyRow('Оборудование', d.facts.equipment)}
-        ${monthlyRow('Расход. мат.', d.facts.materials)}
-        ${monthlyRow('Сервис', d.facts.service)}
+        ${buildRow('Сервис, €', svcMonths, '#7c3aed')}
+        ${buildRow('Оборудование, €', eqMonths, '#059669')}
+        ${buildRow('Расходные материалы, €', matMonths, '#d97706')}
+        ${planRow('План (год)')}
       </tbody>
     </table>
 
-    <div style="margin-top: 16px; font-size: 10px; color: var(--text-dim); text-align: center;">
+    <div style="margin-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;">
       Документ сформирован статической версией приложения • КОМПО • ${new Date().toLocaleDateString('ru-RU')}
     </div>
   `;
 }
 
-// ─── Excel export (using SheetJS) ─────────────────────────────────────────────
+function printDealer(dealerId) {
+  const d = dealerId ? state.dealers.find(x => x.id === dealerId) : state.dealers.find(x => x.id === document.getElementById('dealer-select').value);
+  if (!d) return;
+  const q = state.quarter;
+  const isZarub = d.type === 'Заруб';
+  const planEq = d.plan.equipment, planMat = d.plan.materials, planSvc = d.plan.service;
+  const planTotal = planEq + planMat + planSvc;
+  const eqMonths = d.facts.equipment.months || d.facts.equipment;
+  const matMonths = d.facts.materials.months || d.facts.materials;
+  const svcMonths = d.facts.service.months || d.facts.service;
+  const factEq = sumYear(eqMonths) ?? 0;
+  const factMat = sumYear(matMonths) ?? 0;
+  const factSvc = sumYear(svcMonths) ?? 0;
+  const factTotal = factEq + factMat + factSvc;
+  const qf = isZarub ? halfYearFactsByCategory(d, q) : quarterlyFactsByCategory(d, q);
+  const periodLabel = isZarub
+    ? 'за ' + (q <= 2 ? 1 : 2) + ' п/г (' + quarterMonthRange(q) + ') — накопительно до ' + q + ' кв.'
+    : 'за ' + q + ' кв. (' + quarterMonthRange(q) + ')';
+  const eqPct = calcEquipmentDiscountPct(d, q);
+  const matSplit = calcMaterialsDiscountPctSplit(d, q);
+  const svcPct = getServiceDiscountPctNormalized(d, q);
+
+  const row = (label, months) => {
+    const t = sumYear(months) ?? 0;
+    const cells = months.map(v => v === null ? '<td class="empty">—</td>' : '<td>' + fmt(v, '') + '</td>').join('');
+    return '<tr><td class="cat">' + label + '</td>' + cells + '<td class="total">' + fmt(t, '') + '</td></tr>';
+  };
+
+  const html = '<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8"><title>' + d.name + ' — Печать</title>' +
+    '<style>' +
+    'body{font-family:Inter,-apple-system,system-ui,Segoe UI,Roboto,sans-serif;color:#0f172a;margin:24px;font-size:12px}' +
+    'h1{font-size:16px;margin:0 0 4px;color:#047857}h2{font-size:13px;margin:18px 0 6px;color:#334155}' +
+    '.header{display:flex;justify-content:space-between;border-bottom:2px solid #047857;padding-bottom:8px;margin-bottom:12px}' +
+    '.dealer-line{background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;padding:8px 12px;margin-bottom:12px}' +
+    '.dealer-line .name{font-weight:700;color:#065f46}.dealer-line .kpi{margin-left:12px;color:#475569}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:12px}th,td{border:1px solid #cbd5e1;padding:4px 6px;text-align:right;font-size:11px}' +
+    'th{background:#f1f5f9;font-weight:600;color:#334155}td.cat,th.cat{text-align:left;font-weight:600;background:#f8fafc;min-width:110px}' +
+    'td.empty{color:#94a3b8}td.total,th.total{background:#fef3c7;font-weight:700}.discount{background:#ecfdf5;color:#047857;font-weight:700}' +
+    '.scale-table tr.total-row td{background:#ecfdf5;font-weight:700;color:#047857}.muted{color:#94a3b8;font-style:italic;font-size:11px}' +
+    '@media print{body{margin:8mm}}' +
+    '</style></head><body>' +
+    '<div class="header"><div><h1>Расчёт скидок — ' + (isZarub ? (q <= 2 ? 1 : 2) + ' полугодие (до ' + q + ' кв.)' : q + ' кв.') + '</h1>' +
+    '<div style="font-size:11px;color:#64748b">' + periodLabel + '</div></div>' +
+    '<div style="font-size:11px;color:#64748b;text-align:right"><b>КОМПО</b><br>' + new Date().toLocaleDateString('ru-RU') + '</div></div>' +
+    '<div class="dealer-line"><span class="name">' + d.name + '</span>' +
+    '<span class="kpi">План: ' + fmt(planTotal, ' €') + '</span>' +
+    '<span class="kpi">Выручка: ' + fmt(factTotal, ' €') + '</span>' +
+    '<span class="kpi">Тип: ' + d.type + '</span></div>' +
+    '<h2>Категории — план / факт / выполнение / скидка</h2>' +
+    '<table><thead><tr><th class="cat">Категория</th><th>План год</th><th>Факт год</th><th>Факт ' + q + ' кв.</th><th>Скидка % (объём)</th><th>Скидка % (мин. ост.)</th></tr></thead><tbody>' +
+    '<tr><td class="cat">Оборудование</td><td>' + fmt(planEq, ' €') + '</td><td>' + fmt(factEq, ' €') + '</td><td>' + fmt(qf.equipment ?? 0, ' €') + '</td><td class="discount">' + fmtPct(eqPct) + '</td><td class="discount">—</td></tr>' +
+    '<tr><td class="cat">Расход. мат.</td><td>' + fmt(planMat, ' €') + '</td><td>' + fmt(factMat, ' €') + '</td><td>' + fmt(qf.materials ?? 0, ' €') + '</td><td class="discount">' + fmtPct(matSplit.volume) + '</td><td class="discount">' + fmtPct(matSplit.minStock) + '</td></tr>' +
+    '<tr><td class="cat">Сервис</td><td>' + fmt(planSvc, ' €') + '</td><td>' + (factSvc > 0 ? fmt(factSvc, ' €') : '—') + '</td><td>' + fmt(qf.service ?? 0, ' €') + '</td><td class="discount">' + fmtPct(svcPct) + '</td><td class="discount">—</td></tr>' +
+    '</tbody></table>' +
+    '<h2>Помесячные отгрузки (Апр → Мар)</h2>' +
+    '<table><thead><tr><th class="cat">Категория</th>' + MONTH_LABELS.map(m => '<th>' + m + '</th>').join('') + '<th class="total">Итог</th></tr></thead><tbody>' +
+    row('Оборудование', eqMonths) +
+    row('Расход. мат.', matMonths) +
+    row('Сервис', svcMonths) +
+    '</tbody></table>' +
+    '<div style="margin-top:16px;font-size:10px;color:#94a3b8;text-align:center">Документ сформирован приложением «Расчёт скидок дилеров» • КОМПО • ' + new Date().toLocaleDateString('ru-RU') + '</div>' +
+    '<script>window.onload=function(){setTimeout(function(){window.print();},300);};</scr' + 'ipt></body></html>';
+
+  const w = window.open('', '_blank', 'width=1024,height=720');
+  if (!w) { showToast('Разрешите всплывающие окна, чтобы открыть окно печати', 'error'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
 function exportExcel() {
   const q = state.quarter;
   const wb = XLSX.utils.book_new();
 
-  // Sheet 1: Summary
   const summaryData = [['Дилер', 'Тип', 'План / период', 'Факт / период', 'Вып. %',
     'EQ План €', 'EQ Факт €', 'EQ Скид. %',
     'MAT План €', 'MAT Факт €', 'MAT Скид. % (объём)', 'MAT Скид. % (мин. ост.)']];
@@ -1006,10 +1287,9 @@ function exportExcel() {
     ]);
   });
   const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
-  ws1['!cols'] = [{wch:22},{wch:7},{wch:14},{wch:14},{wch:8},{wch:12},{wch:12},{wch:10},{wch:12},{wch:12},{wch:18},{wch:18}];
+  ws1['!cols'] = [{wch:35},{wch:7},{wch:14},{wch:14},{wch:8},{wch:12},{wch:12},{wch:10},{wch:12},{wch:12},{wch:18},{wch:18}];
   XLSX.utils.book_append_sheet(wb, ws1, 'Сводная');
 
-  // Sheet 2: Service
   const svcData = [['Дилер', 'Тип', 'План Сервис (год)', 'Факт Сервис (накопл.)', 'Выполн. %', 'Сервис %']];
   state.dealers.forEach(d => {
     const sp = d.plan.service;
@@ -1019,82 +1299,316 @@ function exportExcel() {
     svcData.push([d.name, d.type, sp, sf, exec, pct]);
   });
   const ws2 = XLSX.utils.aoa_to_sheet(svcData);
-  ws2['!cols'] = [{wch:22},{wch:7},{wch:18},{wch:20},{wch:12},{wch:12}];
+  ws2['!cols'] = [{wch:35},{wch:7},{wch:18},{wch:20},{wch:12},{wch:12}];
   XLSX.utils.book_append_sheet(wb, ws2, 'Сервис');
 
-  // Sheet 3: Monthly facts
   const monthlyData = [['Дилер', 'Категория', ...MONTH_LABELS, 'Итого']];
   state.dealers.forEach(d => {
-    ['equipment', 'materials', 'service'].forEach(cat => {
-      const months = d.facts[cat];
+    const cats = [
+      ['equipment', 'Оборудование'],
+      ['materials', 'Расход. мат.'],
+      ['service', 'Сервис'],
+    ];
+    cats.forEach(([cat, label]) => {
+      const months = d.facts[cat].months || d.facts[cat];
       const total = sumYear(months) ?? 0;
-      monthlyData.push([d.name, cat === 'equipment' ? 'Оборудование' : cat === 'materials' ? 'Расход. мат.' : 'Сервис', ...months, total]);
+      monthlyData.push([d.name, label, ...months, total]);
     });
   });
   const ws3 = XLSX.utils.aoa_to_sheet(monthlyData);
-  ws3['!cols'] = [{wch:22},{wch:14},...Array(12).fill({wch:10}),{wch:12}];
+  ws3['!cols'] = [{wch:35},{wch:14},...Array(12).fill({wch:10}),{wch:12}];
   XLSX.utils.book_append_sheet(wb, ws3, 'Помесячно');
 
-  XLSX.writeFile(wb, `kompo-discount-calculator-q${q}-${new Date().toISOString().slice(0,10)}.xlsx`);
-  showToast('Excel-файл сохранён');
+  XLSX.writeFile(wb, 'kompo-discount-calculator-q' + q + '-' + new Date().toISOString().slice(0,10) + '.xlsx');
+  showToast('Excel-файл сохранён', 'success');
 }
 
-// ─── JSON export / import ─────────────────────────────────────────────────────
 function exportJSON() {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `kompo-discount-data-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = 'kompo-discount-data-' + new Date().toISOString().slice(0,10) + '.json';
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Данные сохранены в JSON');
+  showToast('Данные сохранены в JSON', 'success');
 }
 
-function handleXLSXUpload(e) {
+function handleJSONUpload(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = (ev) => {
     try {
+      const parsed = JSON.parse(ev.target.result);
+      if (!parsed.dealers || !parsed.scales) throw new Error('Неверный формат JSON');
+      state = parsed;
+      saveState();
+      populateDealerSelects();
+      rerender();
+      showToast('Данные восстановлены из JSON', 'success');
+    } catch (err) {
+      showToast('Ошибка JSON: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ─── XLSX parser ─────────────────────────────────────────────────────────────
+function parseXLSX(file) {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
       const data = new Uint8Array(ev.target.result);
       const wb = XLSX.read(data, { type: 'array' });
-      const sheetName = wb.SheetNames[0];
-      const sheet = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-      showToast('Загружено строк: ' + rows.length + ' (обработку нужно доделать)');
+      const result = { dealers: {}, errors: [] };
+
+      const MONTH_COLS = ['Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек', 'Янв', 'Фев', 'Мар'];
+      const CAT_KEYWORDS = {
+        equipment: ['оборуд', 'equip', 'мп'],
+        materials: ['расход', 'материал', 'rm', 'рм'],
+        service:   ['сервис', 'зч', 'service'],
+      };
+
+      function classifyCategory(text) {
+        const lc = (text || '').toLowerCase();
+        for (const [cat, keys] of Object.entries(CAT_KEYWORDS)) {
+          if (keys.some(k => lc.includes(k))) return cat;
+        }
+        return null;
+      }
+
+      function findMonthCol(headers) {
+        const idx = [];
+        for (const m of MONTH_COLS) {
+          const i = headers.findIndex(h => String(h || '').trim().toLowerCase().startsWith(m.toLowerCase().slice(0,3)));
+          idx.push(i);
+        }
+        if (idx.every(i => i === -1)) return null;
+        return idx;
+      }
+
+      function parseRow(row, idx) {
+        return idx.map(i => {
+          if (i < 0 || i >= row.length) return null;
+          const v = row[i];
+          if (v === null || v === undefined || v === '') return null;
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        });
+      }
+
+      function matchDealer(name) {
+        if (!name) return null;
+        const lc = name.toLowerCase().trim();
+        return state.dealers.find(d => {
+          const dlc = d.name.toLowerCase();
+          return dlc === lc || dlc.includes(lc) || lc.includes(dlc.split(',')[0].trim()) || dlc.split(',')[0].trim().includes(lc);
+        });
+      }
+
+      wb.SheetNames.forEach(sheetName => {
+        const sheet = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+        if (rows.length === 0) return;
+
+        const headers = rows[0].map(h => String(h || '').trim());
+        const monthIdx = findMonthCol(headers);
+        if (!monthIdx) {
+          result.errors.push('Лист «' + sheetName + '»: не найдены колонки месяцев (Апр…Мар)');
+          return;
+        }
+
+        let dealerCol = headers.findIndex(h => /дилер|наименование|название|name/i.test(String(h||'')));
+        let catCol = headers.findIndex(h => /категор|category|тип|вид/i.test(String(h||'')));
+
+        const sheetCategory = classifyCategory(sheetName);
+        const sheetDealer = matchDealer(sheetName);
+
+        rows.slice(1).forEach((row, ri) => {
+          if (!row || row.every(c => c === null || c === '')) return;
+
+          let dealerName = dealerCol >= 0 ? String(row[dealerCol] || '').trim() : (sheetDealer ? sheetDealer.name : sheetName);
+          let categoryName = catCol >= 0 ? String(row[catCol] || '').trim() : (sheetCategory || classifyCategory(sheetName) || classifyCategory(row[0] ? String(row[0]) : ''));
+
+          if (!dealerName && row[0] && typeof row[0] === 'string') dealerName = String(row[0]).trim();
+          if (!dealerName) return;
+
+          const dealer = matchDealer(dealerName);
+          if (!dealer) {
+            result.errors.push('Лист «' + sheetName + '» строка ' + (ri+2) + ': дилер «' + dealerName + '» не найден');
+            return;
+          }
+
+          const cat = classifyCategory(categoryName) || sheetCategory;
+          if (!cat) {
+            result.errors.push('Лист «' + sheetName + '» строка ' + (ri+2) + ': категория «' + categoryName + '» не распознана');
+            return;
+          }
+
+          const values = parseRow(row, monthIdx);
+          if (!result.dealers[dealer.id]) result.dealers[dealer.id] = {};
+          result.dealers[dealer.id][cat] = values;
+        });
+      });
+
+      let updated = 0;
+      Object.entries(result.dealers).forEach(([dealerId, facts]) => {
+        const dealer = state.dealers.find(d => d.id === dealerId);
+        if (!dealer) return;
+        if (facts.equipment) { dealer.facts.equipment = facts.equipment; updated++; }
+        if (facts.materials) { dealer.facts.materials = facts.materials; updated++; }
+        if (facts.service)   { dealer.facts.service = facts.service; updated++; }
+      });
+
+      saveState();
+      populateDealerSelects();
+      rerender();
+
+      const dealerCount = Object.keys(result.dealers).length;
+      let msg = 'Загружено: ' + dealerCount + ' дилер(ов), ' + updated + ' категорий обновлено';
+      if (result.errors.length > 0) {
+        msg += '. Предупреждений: ' + result.errors.length;
+        console.warn('XLSX import warnings:', result.errors);
+      }
+      showToast(msg, 'success');
     } catch (err) {
-      showToast('Ошибка чтения XLSX: ' + err.message);
+      console.error('XLSX parse failed:', err);
+      showToast('Ошибка чтения XLSX: ' + err.message, 'error');
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+function handleXLSXUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  parseXLSX(file);
+  e.target.value = '';
+}
+
+function handleCSVUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const text = ev.target.result;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) { showToast('CSV пуст или нет данных', 'error'); return; }
+
+      const first = lines[0];
+      const delim = first.includes(';') ? ';' : first.includes('\t') ? '\t' : ',';
+      const headers = first.split(delim).map(h => h.trim().replace(/^"|"$/g, ''));
+      const MONTH_COLS = ['Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек', 'Янв', 'Фев', 'Мар'];
+      const monthIdx = MONTH_COLS.map(m =>
+        headers.findIndex(h => h.toLowerCase().startsWith(m.toLowerCase().slice(0,3)))
+      );
+      if (monthIdx.every(i => i === -1)) { showToast('CSV: не найдены колонки месяцев', 'error'); return; }
+
+      let dealerCol = headers.findIndex(h => /дилер|наименование|name/i.test(h));
+      let catCol = headers.findIndex(h => /категор|category|тип/i.test(h));
+      if (dealerCol < 0) dealerCol = 0;
+      if (catCol < 0) catCol = 1;
+
+      const CAT_KEYWORDS = {
+        equipment: ['оборуд', 'equip', 'мп'],
+        materials: ['расход', 'материал', 'рм', 'rm'],
+        service:   ['сервис', 'зч', 'service'],
+      };
+      const classifyCat = (text) => {
+        const lc = (text || '').toLowerCase();
+        for (const [cat, keys] of Object.entries(CAT_KEYWORDS)) {
+          if (keys.some(k => lc.includes(k))) return cat;
+        }
+        return null;
+      };
+      const matchDealer = (name) => {
+        if (!name) return null;
+        const lc = name.toLowerCase().trim();
+        return state.dealers.find(d => {
+          const dlc = d.name.toLowerCase();
+          return dlc === lc || dlc.includes(lc) || lc.includes(dlc.split(',')[0].trim()) || dlc.split(',')[0].trim().includes(lc);
+        });
+      };
+
+      let updated = 0;
+      const usedDealers = new Set();
+      const errors = [];
+
+      lines.slice(1).forEach((line, li) => {
+        const cols = line.split(delim).map(c => c.trim().replace(/^"|"$/g, ''));
+        if (cols.every(c => !c)) return;
+        const dealerName = cols[dealerCol];
+        const categoryName = cols[catCol];
+        if (!dealerName) return;
+
+        const dealer = matchDealer(dealerName);
+        if (!dealer) {
+          errors.push('Строка ' + (li+2) + ': дилер «' + dealerName + '» не найден');
+          return;
+        }
+        const cat = classifyCat(categoryName);
+        if (!cat) {
+          errors.push('Строка ' + (li+2) + ': категория «' + categoryName + '» не распознана');
+          return;
+        }
+
+        const values = monthIdx.map(i => {
+          if (i < 0 || i >= cols.length) return null;
+          const v = cols[i].replace(/\s/g, '').replace(',', '.');
+          if (v === '' || v === '-') return null;
+          const n = Number(v);
+          return Number.isFinite(n) ? n : null;
+        });
+
+        dealer.facts[cat] = values;
+        updated++;
+        usedDealers.add(dealer.id);
+      });
+
+      saveState();
+      populateDealerSelects();
+      rerender();
+      let msg = 'CSV загружен: ' + usedDealers.size + ' дилер(ов), ' + updated + ' категорий обновлено';
+      if (errors.length) msg += '. Предупреждений: ' + errors.length;
+      showToast(msg, 'success');
+      if (errors.length) console.warn('CSV import warnings:', errors);
+    } catch (err) {
+      console.error('CSV parse failed:', err);
+      showToast('Ошибка CSV: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
   e.target.value = '';
 }
 
 function resetData() {
-  if (!confirm('Сбросить все данные к исходным 18 дилерам?')) return;
-  state.dealers = JSON.parse(JSON.stringify(SEED_DEALERS));
-  state.scales = JSON.parse(JSON.stringify(SEED_SCALES));
+  if (!confirm('Сбросить все данные к исходным?')) return;
+  state = JSON.parse(JSON.stringify(SEED_STATE));
   state.quarter = 1;
   document.getElementById('quarter-select').value = '1';
-  populateDealerSelect();
+  populateDealerSelects();
   rerender();
-  showToast('Данные сброшены');
+  showToast('Данные сброшены', 'success');
 }
 
-function showToast(msg) {
+function showToast(msg, kind = '') {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  t.className = 'toast show ' + kind;
+  setTimeout(() => t.className = 'toast ' + kind, 3500);
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+document.getElementById('quarter-select').addEventListener('change', rerender);
 document.getElementById('xlsx-input').addEventListener('change', handleXLSXUpload);
+document.getElementById('csv-input').addEventListener('change', handleCSVUpload);
+document.getElementById('json-input').addEventListener('change', handleJSONUpload);
 
 loadState();
 document.getElementById('quarter-select').value = String(state.quarter || 1);
-populateDealerSelect();
+populateDealerSelects();
 renderSummary();
 renderService();
 updateStorageInfo();
