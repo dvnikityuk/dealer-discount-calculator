@@ -560,10 +560,11 @@ table.monthly tr.year-row td { background: #e0f2fe; font-weight: 700; }
         </div>
         <div class="card-body" style="padding: 14px;">
           <div id="data-source-info" style="font-size: 13px; color: #475569; line-height: 1.6;">
-            <p style="margin-bottom: 8px;"><strong>Файлы данных:</strong></p>
+            <p style="margin-bottom: 8px;"><strong>Файлы данных (3 шт.):</strong></p>
             <ul style="list-style: disc; padding-left: 22px; margin-bottom: 10px;">
-              <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/dealers.xlsx</code> — планы и факты по дилерам (листы «Планы» и «Факты»)</li>
-              <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/scales.xlsx</code> — шкалы скидок (один лист на шкалу)</li>
+              <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/plan.xlsx</code> — планы дилеров на год (лист «Планы»)</li>
+              <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/fact.csv</code> — факты отгрузок (CSV: Тип ТМЦ, Дилер, MonthStart, Выручка)</li>
+              <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/scales.xlsx</code> — шкалы скидок (один лист на дилера, со шкалами оборудования / расходных материалов / сервиса)</li>
             </ul>
             <p style="margin-bottom: 6px;"><strong>Как обновить данные:</strong></p>
             <ol style="list-style: decimal; padding-left: 22px; margin-bottom: 0;">
@@ -599,39 +600,81 @@ function setStatus(text, ok) {
   el.style.color = ok === true ? '#047857' : ok === false ? '#b91c1c' : '#475569';
 }
 
+// ─── Name normalization for matching dealers across files ───────────────────
+function normName(s) {
+  if (!s) return '';
+  return String(s).toLowerCase()
+    .replace(/[«»"'']/g, '')
+    .replace(/ё/g, 'е')
+    .replace(/[^a-zа-я0-9]+/gi, '')
+    .trim();
+}
+
+// ─── Month index: Apr=0, May=1, …, Mar=11 (financial year) ──────────────────
+const MONTH_INDEX = {
+  '2026-04': 0, '2026-05': 1, '2026-06': 2, '2026-07': 3, '2026-08': 4, '2026-09': 5,
+  '2026-10': 6, '2026-11': 7, '2026-12': 8, '2027-01': 9, '2027-02': 10, '2027-03': 11,
+};
+
+function monthIndexFromCsv(dateStr) {
+  // Format: "2026-05-01 00:00:00" or "2026-05-01"
+  if (!dateStr) return -1;
+  const s = String(dateStr).slice(0, 7); // "YYYY-MM"
+  return MONTH_INDEX[s] ?? -1;
+}
+
+// ─── Map CSV "Тип ТМЦ" to our category keys ─────────────────────────────────
+function csvTypeToKey(t) {
+  const s = String(t || '').toLowerCase().trim();
+  if (s.includes('оборуд')) return 'equipment';
+  if (s.includes('расход') || s.includes('материал')) return 'materials';
+  if (s.includes('сервис') || s.includes('запчаст')) return 'service';
+  return null;
+}
+
 /**
- * Fetch XLSX files from data_sample/ folder and parse them into app state.
- * Falls back to embedded SEED_STATE if fetch fails (e.g. file:// protocol).
+ * Fetch 3 data files from data_sample/ and build app state:
+ *   - plan.xlsx  → dealers + annual plans
+ *   - fact.csv   → monthly facts (CSV: Тип ТМЦ, Дилеры, MonthStart, Выручка)
+ *   - scales.xlsx → per-dealer scale tables (one sheet per dealer)
+ *
+ * Falls back to embedded SEED_STATE if fetch fails.
  */
 async function loadDataFromSample() {
   setStatus('загрузка из data_sample/…', null);
   const base = window.location.href.replace(/\/[^\/]*$/, '/');
-  const [dealersRes, scalesRes] = await Promise.all([
-    fetch(base + 'data_sample/dealers.xlsx', { cache: 'no-store' }),
+  const [planRes, factRes, scalesRes] = await Promise.all([
+    fetch(base + 'data_sample/plan.xlsx', { cache: 'no-store' }),
+    fetch(base + 'data_sample/fact.csv', { cache: 'no-store' }),
     fetch(base + 'data_sample/scales.xlsx', { cache: 'no-store' }),
   ]);
-  if (!dealersRes.ok || !scalesRes.ok) {
-    throw new Error('HTTP ' + dealersRes.status + '/' + scalesRes.status);
+  if (!planRes.ok || !factRes.ok || !scalesRes.ok) {
+    throw new Error('HTTP ' + planRes.status + '/' + factRes.status + '/' + scalesRes.status);
   }
-  const dealersBuf = await dealersRes.arrayBuffer();
+  const planBuf = await planRes.arrayBuffer();
+  const factText = await factRes.text();
   const scalesBuf = await scalesRes.arrayBuffer();
-  const parsed = parseDataSampleXLSX(dealersBuf, scalesBuf);
+  const parsed = parseDataSampleFiles(planBuf, factText, scalesBuf);
   state = parsed;
-  setStatus('загружено ' + parsed.dealers.length + ' дилеров, ' + parsed.scales.length + ' шкал из data_sample/', true);
+  const withScales = parsed.dealers.filter(d => d.scales && d.scales.length > 0).length;
+  const withFacts = parsed.dealers.filter(d => {
+    const f = d.facts;
+    return (f.service.months.some(v => v !== null) ||
+            f.equipment.months.some(v => v !== null) ||
+            f.materials.months.some(v => v !== null));
+  }).length;
+  setStatus('загружено ' + parsed.dealers.length + ' дилеров, ' + withFacts + ' с фактами, ' + withScales + ' со шкалами', true);
 }
 
 /**
- * Parse dealers.xlsx (sheets "Планы", "Факты") + scales.xlsx (1 sheet per scale)
- * into the app state shape used by SEED_STATE.
+ * Parse plan.xlsx + fact.csv + scales.xlsx into app state.
  */
-function parseDataSampleXLSX(dealersBuf, scalesBuf) {
-  const wbD = XLSX.read(dealersBuf, { type: 'array' });
-  const plansSheet = wbD.Sheets['Планы'];
-  const factsSheet = wbD.Sheets['Факты'];
-  if (!plansSheet || !factsSheet) throw new Error('В dealers.xlsx нет листа "Планы" или "Факты"');
-
-  const plans = XLSX.utils.sheet_to_json(plansSheet, { defval: null });
-  const facts = XLSX.utils.sheet_to_json(factsSheet, { defval: null });
+function parseDataSampleFiles(planBuf, factText, scalesBuf) {
+  // ─── 1. Parse plan.xlsx → dealers with empty facts and scales ────────────
+  const wbP = XLSX.read(planBuf, { type: 'array' });
+  const plansSheet = wbP.Sheets['Планы'];
+  if (!plansSheet) throw new Error('В plan.xlsx нет листа "Планы"');
+  const planRows = XLSX.utils.sheet_to_json(plansSheet, { defval: null });
 
   const toNum = (v) => {
     if (v === null || v === undefined || v === '') return null;
@@ -639,81 +682,395 @@ function parseDataSampleXLSX(dealersBuf, scalesBuf) {
     return isNaN(n) ? null : n;
   };
 
-  const dealers = plans.map(p => {
+  const dealers = planRows.map(p => {
     const name = String(p['Дилер'] ?? '').trim();
     const type = String(p['Тип'] ?? 'РФ').trim();
     const planSvc = toNum(p['План Сервис']) ?? 0;
     const planEq = toNum(p['План Оборудование']) ?? 0;
     const planMat = toNum(p['План Расходные материалы']) ?? 0;
     const svcPctRaw = p['Скидка Сервис %'];
-    const svcPct = svcPctRaw === null || svcPctRaw === undefined || svcPctRaw === '' ? null : toNum(svcPctRaw);
-
-    const svcRow = facts.find(f => String(f['Дилер']).trim() === name && String(f['Категория']).trim() === 'Сервис');
-    const eqRow = facts.find(f => String(f['Дилер']).trim() === name && String(f['Категория']).trim() === 'Оборудование');
-    const matRow = facts.find(f => String(f['Дилер']).trim() === name && String(f['Категория']).trim() === 'Расходные материалы');
-
-    const toMonths = (row) => MONTH_LABELS.map(m => {
-      if (!row) return null;
-      return toNum(row[m]);
-    });
-
+    const svcPct = (svcPctRaw === null || svcPctRaw === undefined || svcPctRaw === '') ? null : toNum(svcPctRaw);
     const id = name
       .toLowerCase()
       .replace(/[^a-z0-9а-яё]+/gi, '_')
       .replace(/^_+|_+$/g, '')
       .slice(0, 30) || ('d' + Math.random().toString(36).slice(2, 8));
-
     return {
-      id,
-      name,
-      type,
+      id, name, type,
       plan: { service: planSvc, equipment: planEq, materials: planMat },
       facts: {
-        service:   { months: toMonths(svcRow) },
-        equipment: { months: toMonths(eqRow) },
-        materials: { months: toMonths(matRow) },
+        service:   { months: [null,null,null,null,null,null,null,null,null,null,null,null] },
+        equipment: { months: [null,null,null,null,null,null,null,null,null,null,null,null] },
+        materials: { months: [null,null,null,null,null,null,null,null,null,null,null,null] },
       },
       servicePercent: svcPct,
       scales: [],
     };
   });
 
-  // ─── Parse scales.xlsx (1 sheet per scale table) ──────────────────────────
-  const wbS = XLSX.read(scalesBuf, { type: 'array' });
-  const scales = wbS.SheetNames.map(sheetName => {
-    const ws = wbS.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-    // Row 0: scale title (in cell A1, possibly merged)
-    // Row 1: header (col 0 = "Компонент", cols 1+ = tier labels)
-    // Row 2+: data rows
-    const title = (rows[0] && rows[0][0]) ? String(rows[0][0]) : sheetName;
-    const headerRow = rows[1] || [];
-    const columns = [];
-    for (let i = 1; i < headerRow.length; i++) {
-      if (headerRow[i] !== null && headerRow[i] !== undefined && headerRow[i] !== '') {
-        columns.push(String(headerRow[i]));
+  // ─── 2. Parse fact.csv → fill dealer.facts by matching dealer name ───────
+  // CSV format: Тип ТМЦ,Дилеры (вып.условий),MonthStart,Выручка
+  const factLines = factText.replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim());
+  if (factLines.length < 2) throw new Error('fact.csv пуст или не содержит данных');
+  // Simple CSV parser: handles quoted fields with commas
+  const parseCsvLine = (line) => {
+    const out = [];
+    let cur = '';
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+        else inQ = !inQ;
+      } else if (ch === ',' && !inQ) {
+        out.push(cur); cur = '';
+      } else {
+        cur += ch;
       }
     }
-    const dataRows = rows.slice(2).filter(r => r && r[0] !== null && r[0] !== undefined && r[0] !== '');
-    return {
-      title,
-      columns,
-      rows: dataRows.map(r => ({
-        component: String(r[0]),
-        values: columns.map((_, i) => (r[i + 1] === null || r[i + 1] === undefined) ? '' : String(r[i + 1])),
-        isTotal: typeof r[0] === 'string' && /итого|total/i.test(r[0]),
-      })),
-    };
-  });
+    out.push(cur);
+    return out;
+  };
+  const header = parseCsvLine(factLines[0]).map(h => h.trim());
+  // Find column indices
+  const colType = header.findIndex(h => /тип.*тмц|тип/i.test(h));
+  const colDealer = header.findIndex(h => /дилер/i.test(h));
+  const colMonth = header.findIndex(h => /month/i.test(h));
+  const colRev = header.findIndex(h => /выручк|revenue/i.test(h));
+  if (colDealer < 0 || colMonth < 0 || colRev < 0) {
+    throw new Error('fact.csv: не найдены колонки (Дилер, MonthStart, Выручка)');
+  }
 
-  // Assign scales to each dealer (scales are global reference tables)
-  dealers.forEach(d => { d.scales = scales; });
+  // Build normalized name lookup
+  const dealerByName = {};
+  dealers.forEach(d => { dealerByName[normName(d.name)] = d; });
+
+  let factRowCount = 0;
+  for (let i = 1; i < factLines.length; i++) {
+    const cols = parseCsvLine(factLines[i]);
+    const dealerName = (cols[colDealer] || '').trim();
+    const monthStr = (cols[colMonth] || '').trim();
+    const revenue = toNum(cols[colRev]);
+    const typeKey = colType >= 0 ? csvTypeToKey(cols[colType]) : null;
+    if (!dealerName || revenue === null) continue;
+    const mIdx = monthIndexFromCsv(monthStr);
+    if (mIdx < 0) continue;
+    const d = dealerByName[normName(dealerName)];
+    if (!d) continue;  // skip unknown dealers
+    if (!typeKey) continue;
+    // Sum if multiple entries for same dealer/month/category
+    const cur = d.facts[typeKey].months[mIdx];
+    d.facts[typeKey].months[mIdx] = (cur ?? 0) + revenue;
+    factRowCount++;
+  }
+
+  // ─── 3. Parse scales.xlsx → extract per-dealer scale tables ──────────────
+  // Layout (per sheet):
+  //   Row 0: empty
+  //   Row 1: header row containing "Выручка 2024" / "Выручка 2025"
+  //   Row 2: dealer name + annual revenue values
+  //   Row 3+: plan category rows (Сервис, Оборудование, Расходные материалы)
+  //   Row N+: scale tables (Оборудование / Расходные материалы / Сервис)
+  //
+  // SheetJS strips leading empty columns inconsistently across sheets, so we
+  // dynamically detect the "label column" by locating "Выручка 2024" — the
+  // cell to its LEFT is the label column (where dealer name and section
+  // headers live). Tier labels and data values start at labelCol + 2.
+  const wbS = XLSX.read(scalesBuf, { type: 'array' });
+  const allScales = [];
+  const scalesByDealerName = {};
+
+  for (const sheetName of wbS.SheetNames) {
+    if (/^лист\d*$/i.test(sheetName)) continue;
+    const ws = wbS.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    if (!rows || rows.length < 12) continue;
+
+    // ─── 3a. Find header row containing "Выручка 2024"/"Выручка 2025" ────────
+    let headerRow = -1;
+    for (let r = 0; r < Math.min(8, rows.length); r++) {
+      const row = rows[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const v = row[c];
+        if (v && /Выручка\s*202[3-6]/i.test(String(v))) {
+          headerRow = r;
+          break;
+        }
+      }
+      if (headerRow >= 0) break;
+    }
+    if (headerRow < 0) continue;
+
+    // ─── 3b. labelCol = col of first string cell in row[headerRow+1] ────────
+    // The dealer name is in the row below the header. Its column is the
+    // "label column" — all section headers and row labels live there.
+    const dealerRow = rows[headerRow + 1];
+    if (!dealerRow) continue;
+    let labelCol = -1, dealerName = '';
+    for (let c = 0; c < dealerRow.length; c++) {
+      const v = dealerRow[c];
+      if (typeof v === 'string' && v.trim() !== '') {
+        labelCol = c;
+        dealerName = v.trim();
+        break;
+      }
+    }
+    if (labelCol < 0 || !dealerName) continue;
+    if (/^(сервис|оборудование|расходные\s*материалы|запасные\s*части|выручка)/i.test(dealerName)) continue;
+
+    // ─── 3c. Detect dealer type: РФ if "СИСТЕМА РАСЧЕТА СКИДКИ ПО ЗАПЧАСТЯМ" ──
+    let dealerType = 'Заруб';
+    for (let r = 0; r < rows.length; r++) {
+      const v = rows[r] && rows[r][labelCol];
+      if (v && /СИСТЕМА\s+РАСЧЕТА\s+СКИДКИ\s+ПО\s+ЗАПЧАСТЯМ/i.test(String(v))) {
+        dealerType = 'РФ';
+        break;
+      }
+    }
+
+    const ctx = { rows, labelCol, maxRow: rows.length - 1 };
+    const equipment = extractEquipmentScaleJS(ctx, dealerType);
+    const materials = extractMaterialsScaleJS(ctx, dealerType);
+    const service   = extractServiceScaleJS(ctx, dealerType);
+    const scales = [equipment, materials, service].filter(s => s !== null);
+
+    scalesByDealerName[normName(dealerName)] = scales;
+    if (allScales.length === 0 && scales.length > 0) {
+      allScales.push(...scales);
+    }
+  }
+
+  // Assign scales to each dealer (match by normalized name)
+  dealers.forEach(d => {
+    const nn = normName(d.name);
+    // Exact normalized match
+    if (scalesByDealerName[nn]) {
+      d.scales = scalesByDealerName[nn];
+      return;
+    }
+    // Partial match: dealer name starts with sheet name or vice versa
+    for (const [sheetNorm, scales] of Object.entries(scalesByDealerName)) {
+      if (sheetNorm.startsWith(nn.slice(0, 15)) || nn.startsWith(sheetNorm.slice(0, 15))) {
+        d.scales = scales;
+        return;
+      }
+    }
+    // Fallback: use global scales
+    d.scales = allScales;
+  });
 
   return {
     quarter: state.quarter || 1,
     dealers,
-    scales,
+    scales: allScales,
     lastSync: null,
+  };
+}
+
+// ─── Scale extraction helpers ───────────────────────────────────────────────
+// All helpers take a `ctx` object: { rows, labelCol, maxRow }
+// labelCol is the column index (0-based) where section headers and row labels
+// live. Tier labels and data values start at labelCol + 2.
+
+function findSectionHeaderJS(ctx, keywords) {
+  const { rows, labelCol, maxRow } = ctx;
+  const planLabelsExact = new Set(['Сервис', 'Оборудование', 'Расходные материалы', 'Запасные части']);
+  for (let r = 0; r <= maxRow; r++) {
+    const row = rows[r];
+    if (!row) continue;
+    const v = row[labelCol];
+    if (v === null || v === undefined) continue;
+    const s = String(v).trim();
+    if (planLabelsExact.has(s)) continue;
+    const nv = s.toLowerCase().replace(/\s+/g, ' ').trim();
+    for (const kw of keywords) {
+      if (nv.includes(kw.toLowerCase())) return r;
+    }
+  }
+  return -1;
+}
+
+function parsePctJS(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return v;
+  const s = String(v).trim().replace('%', '').replace(',', '.').trim();
+  if (s === '' || s === '—') return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function findTierRowAndCol(ctx, hdrRow, tierRegexes) {
+  // Scan rows hdrRow..hdrRow+3 for a cell matching any tierRegex in cols
+  // (labelCol+2) .. (labelCol+5). Returns { tierRow, tierColStart } or null.
+  const { rows, labelCol, maxRow } = ctx;
+  for (let r = hdrRow; r <= Math.min(hdrRow + 3, maxRow); r++) {
+    const row = rows[r];
+    if (!row) continue;
+    for (let c = labelCol + 2; c <= labelCol + 5; c++) {
+      const v = row[c];
+      if (!v) continue;
+      const sv = String(v);
+      for (const re of tierRegexes) {
+        if (re.test(sv)) {
+          return { tierRow: r, tierColStart: c };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function extractScaleTable(ctx, tierRow, tierColStart, stopRegexes, maxDataRows) {
+  // Read tier labels from tierRow, then read data rows below until stopRegexes
+  // matches the row label or maxDataRows exceeded.
+  const { rows, labelCol, maxRow } = ctx;
+  const columns = [];
+  for (let c = tierColStart; c < tierColStart + 10; c++) {
+    const v = rows[tierRow] && rows[tierRow][c];
+    if (v === null || v === undefined || String(v).trim() === '') break;
+    columns.push(String(v).trim());
+  }
+  if (columns.length === 0) return null;
+
+  const dataRows = [];
+  for (let r = tierRow + 1; r <= Math.min(tierRow + maxDataRows, maxRow); r++) {
+    const row = rows[r];
+    if (!row) continue;
+    const label = row[labelCol];
+    if (label === null || label === undefined) continue;
+    const s = String(label).trim();
+    if (s === '') continue;
+    const labUp = s.toUpperCase();
+    let stop = false;
+    for (const re of stopRegexes) {
+      if (re.test(labUp)) { stop = true; break; }
+    }
+    if (stop) break;
+    if (r === tierRow) continue;
+    const values = [];
+    for (let c = tierColStart; c < tierColStart + columns.length; c++) {
+      const v = row[c];
+      const pct = parsePctJS(v);
+      values.push(pct !== null ? pct + '%' : '');
+    }
+    if (values.every(v => v === '')) continue;
+    const isTotal = /итого|всего/i.test(s);
+    dataRows.push({ component: s, values, isTotal });
+  }
+  if (dataRows.length === 0) return null;
+  return { columns, rows: dataRows };
+}
+
+function extractEquipmentScaleJS(ctx, dealerType) {
+  const hdrRow = findSectionHeaderJS(ctx, ['ОБЪЕМ закупок оборудования', 'ОБОРУДОВАНИЕ']);
+  if (hdrRow < 0) return null;
+  const tierInfo = findTierRowAndCol(ctx, hdrRow, [/до\s*75/i]);
+  if (!tierInfo) return null;
+  const { tierRow, tierColStart } = tierInfo;
+  // Stop at "РАСХОДНЫЕ МАТЕРИАЛЫ" or "СИСТЕМА" or "ЗАПЧАСТИ"
+  const result = extractScaleTable(ctx, tierRow, tierColStart,
+    [/РАСХОДНЫЕ\s+МАТЕРИАЛЫ/, /СИСТЕМА\s+РАСЧЕТА/, /ЗАПЧАСТИ/], 13);
+  if (!result) return null;
+  // Filter out sub-header rows like "ОБЪЕМ ЗАКУПОК В ТЫС"
+  result.rows = result.rows.filter(r => !/ОБЪЕМ\s+ЗАКУПОК\s+В\s+ТЫС/i.test(r.component.toUpperCase()));
+  if (result.rows.length === 0) return null;
+  const period = dealerType === 'РФ' ? 'за квартал' : 'за полугодие';
+  return {
+    title: 'Оборудование — ' + period,
+    columns: result.columns,
+    rows: result.rows,
+  };
+}
+
+function extractMaterialsScaleJS(ctx, dealerType) {
+  const hdrRow = findSectionHeaderJS(ctx, ['ОБЪЕМ закупок РМ', 'РАСХОДНЫЕ МАТЕРИАЛЫ']);
+  if (hdrRow < 0) return null;
+  const tierInfo = findTierRowAndCol(ctx, hdrRow, [/до\s*75/i, /до\s*24/i]);
+  if (!tierInfo) return null;
+  const { tierRow, tierColStart } = tierInfo;
+  const result = extractScaleTable(ctx, tierRow, tierColStart,
+    [/СИСТЕМА\s+РАСЧЕТА/, /ЗАПЧАСТИ/], 9);
+  if (!result) return null;
+  const period = dealerType === 'РФ' ? 'за квартал' : 'за полугодие';
+  return {
+    title: 'Расходные материалы — ' + period,
+    columns: result.columns,
+    rows: result.rows,
+  };
+}
+
+function extractServiceScaleJS(ctx, dealerType) {
+  const { rows, labelCol, maxRow } = ctx;
+  if (dealerType === 'РФ') {
+    const hdrRow = findSectionHeaderJS(ctx, ['СИСТЕМА РАСЧЕТА СКИДКИ ПО ЗАПЧАСТЯМ']);
+    if (hdrRow < 0) return null;
+    const ranges = [];
+    for (let r = hdrRow; r <= maxRow; r++) {
+      const row = rows[r];
+      if (!row) continue;
+      const label = row[labelCol];
+      if (!label) continue;
+      if (!/диапазон отношения/i.test(String(label))) continue;
+      // from = labelCol+1, to = labelCol+2, pct = labelCol+3
+      const fromV = row[labelCol + 1];
+      const toV = row[labelCol + 2];
+      const pct = parsePctJS(row[labelCol + 3]);
+      if (pct === null) continue;
+      const fromN = Number(fromV) || 0;
+      const toN = Number(toV) || 0;
+      let colLabel;
+      if (!toN || toN === 0) colLabel = Math.floor(fromN) + '+';
+      else colLabel = Math.floor(fromN) + '–' + Math.floor(toN);
+      ranges.push({ col: colLabel, pct });
+    }
+    if (ranges.length === 0) return null;
+    return {
+      title: 'Сервис (ЗЧ) — расчёт по парку оборудования',
+      columns: ranges.map(r => r.col),
+      rows: [{
+        component: 'Скидка по сервису',
+        values: ranges.map(r => (r.pct < 1 ? (r.pct * 100) : r.pct).toFixed(0) + '%'),
+        isTotal: true,
+      }],
+    };
+  }
+  // Заруб: absolute shipments
+  const hdrRow = findSectionHeaderJS(ctx, ['ЗАПЧАСТИ']);
+  if (hdrRow < 0) return null;
+  let period = '12 месяцев';
+  const hdrVal = rows[hdrRow] && rows[hdrRow][labelCol];
+  if (hdrVal) {
+    if (/6\s*месяц/i.test(String(hdrVal))) period = '6 месяцев';
+    else if (/12\s*месяц/i.test(String(hdrVal))) period = '12 месяцев';
+  }
+  const ranges = [];
+  for (let r = hdrRow; r <= maxRow; r++) {
+    const row = rows[r];
+    if (!row) continue;
+    const label = row[labelCol];
+    if (!label) continue;
+    if (!/отгрузки в диапазоне/i.test(String(label))) continue;
+    const fromV = row[labelCol + 1];
+    const toV = row[labelCol + 2];
+    const pct = parsePctJS(row[labelCol + 3]);
+    if (pct === null) continue;
+    const fromN = Number(fromV) || 0;
+    const toN = Number(toV) || 0;
+    let colLabel;
+    if (!toN || toN === 0) colLabel = Math.floor(fromN) + '+';
+    else colLabel = Math.floor(fromN) + '–' + Math.floor(toN);
+    ranges.push({ col: colLabel, pct });
+  }
+  if (ranges.length === 0) return null;
+  return {
+    title: 'Сервис (ЗЧ) — абсолютные отгрузки за ' + period,
+    columns: ranges.map(r => r.col),
+    rows: [{
+      component: 'Скидка по сервису',
+      values: ranges.map(r => (r.pct < 1 ? (r.pct * 100) : r.pct).toFixed(0) + '%'),
+      isTotal: true,
+    }],
   };
 }
 
@@ -1202,11 +1559,6 @@ function renderScales() {
       <div class="scale-stat-value">${fmtPct(svcPct)}</div>
       <div class="text-xs text-muted">Факт: ${fmt(svcFact, ' €')}</div>
     </div>
-    <div class="scale-stat scale-stat-ctrl">
-      <div class="scale-stat-title">Система контроля</div>
-      <div class="scale-stat-value">—</div>
-      <div class="text-xs text-muted">Штрафы не рассчитываются</div>
-    </div>
   `;
 
   const renderScale = (s, activeIdx, kind, factLabel, factValue) => {
@@ -1238,8 +1590,7 @@ function renderScales() {
   document.getElementById('scales-body').innerHTML =
     renderScale(eqScale, eqColIdx, 'eq', 'Факт (за период)', fmt(eqFact, ' €') + ' → ' + (eqFact === null ? 'нет данных' : (eqFact/1000).toFixed(1) + ' тыс. €')) +
     renderScale(matScale, matColIdx, 'mat', 'Факт (за период)', fmt(matFact, ' €') + ' → ' + (matFact === null ? 'нет данных' : (matFact/1000).toFixed(1) + ' тыс. €')) +
-    renderScale(svcScale, svcColIdx, 'svc', 'Факт (накопл. 12 мес.)', fmt(svcFact, ' €')) +
-    renderScale(ctrlScale, -1, 'ctrl', 'Штрафы', 'не рассчитываются');
+    renderScale(svcScale, svcColIdx, 'svc', 'Факт (накопл. 12 мес.)', fmt(svcFact, ' €'));
 }
 
 function renderDealerTab() {
