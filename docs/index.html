@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Калькулятор скидок для дилеров КОМПО</title>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --border: #e0e3e8;
+  --border-light: #eef0f3;
+  --head-bg: #f7f8fa;
+  --head-text: #4a5568;
+  --row-alt: #fafbfc;
+  --text: #2d3748;
+  --text-dim: #a0aec0;
+  --accent: #3b82f6;
+  --accent-light: #eff6ff;
+  --green: #16a34a;
+  --green-bg: #ecfdf5;
+  --green-border: #a7f3d0;
+  --green-text: #047857;
+  --violet-bg: #f5f3ff;
+  --violet-text: #6d28d9;
+  --amber-bg: #fffbeb;
+  --amber-text: #92400e;
+  --red: #dc2626;
+  --radius: 4px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app { max-width: 1400px; margin: 0 auto; padding: 16px 20px; }
+
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px; flex-wrap: wrap; gap: 10px;
+}
+.header-title { font-size: 18px; font-weight: 700; color: #1a202c; letter-spacing: -0.3px; }
+.header-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; font-weight: 400; }
+.header-actions { display: flex; gap: 8px; }
+
+.btn {
+  padding: 7px 14px; font-size: 12px; font-weight: 500;
+  font-family: var(--font); border-radius: var(--radius);
+  border: 1px solid transparent; cursor: pointer; transition: all .15s;
+  color: #fff; line-height: 1; white-space: nowrap;
+}
+.btn:hover { filter: brightness(0.92); }
+.btn:active { transform: scale(0.98); }
+.btn-orange { background: #e67e22; }
+.btn-green { background: var(--green); }
+.btn-blue { background: var(--accent); }
+.btn-gray { background: #64748b; }
+
+.controls {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;
+  display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end;
+}
+.ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+.ctrl-label { font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.ctrl-row { display: flex; gap: 4px; align-items: center; }
+
+select.ctrl-input, input.ctrl-input {
+  padding: 5px 8px; font-size: 13px;
+  font-family: var(--font); text-align: left;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: #fff; color: var(--text); min-width: 140px;
+  transition: border-color .15s, box-shadow .15s;
+}
+input.ctrl-input[type=number] { width: 90px; text-align: center; font-family: var(--mono); }
+.ctrl-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(59,130,246,.1); }
+
+.tabs { display: flex; gap: 2px; margin-bottom: 10px; flex-wrap: wrap; }
+.tab {
+  padding: 7px 16px; font-size: 13px; font-weight: 500;
+  font-family: var(--font); cursor: pointer;
+  border: 1px solid var(--border); border-bottom: none;
+  border-radius: 5px 5px 0 0; background: var(--head-bg);
+  color: var(--head-text); transition: all .15s;
+}
+.tab.active { background: var(--card); color: var(--green-text); border-bottom: 1px solid var(--card); position: relative; top: 1px; }
+.tab:hover:not(.active) { background: #eef0f3; }
+
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 6px; overflow: hidden; margin-bottom: 12px;
+}
+.card-header {
+  padding: 10px 14px; border-bottom: 1px solid var(--border-light);
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.card-title { font-size: 14px; font-weight: 600; color: #1a202c; }
+.card-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.card-body { padding: 0; }
+
+.kpi-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px; padding: 10px 14px;
+}
+.kpi {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px;
+}
+.kpi-label { font-size: 10px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.kpi-value { font-size: 18px; font-weight: 700; color: #1a202c; margin-top: 2px; font-family: var(--mono); }
+.kpi-sub { font-size: 11px; color: var(--text-dim); margin-top: 1px; }
+
+table.data {
+  width: 100%; border-collapse: collapse; table-layout: fixed;
+  font-size: 11px;
+}
+table.data th, table.data td {
+  padding: 4px 6px; border-bottom: 1px solid var(--border-light);
+  text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+table.data th { background: var(--head-bg); font-weight: 600; color: var(--head-text); cursor: pointer; user-select: none; }
+table.data th:hover { background: #eef0f3; }
+table.data th.sortable .sort-ind { font-size: 9px; margin-left: 2px; opacity: 0.4; }
+table.data th.sortable.active .sort-ind { opacity: 1; color: var(--green-text); }
+table.data td.cat, table.data th.cat { text-align: left; font-weight: 600; }
+table.data tr:hover { background: var(--green-bg); }
+table.data tr.no-data { opacity: 0.6; }
+table.data .text-right { text-align: right; }
+table.data .text-center { text-align: center; }
+table.data .text-left { text-align: left; }
+table.data .badge {
+  display: inline-block; padding: 1px 6px; border-radius: 3px;
+  font-size: 9px; font-weight: 600;
+}
+table.data .badge-rf { background: #e0e7ff; color: #4338ca; }
+table.data .badge-zarub { background: #fef3c7; color: #92400e; }
+table.data .discount { color: var(--green-text); font-weight: 700; }
+table.data .discount-violet { color: var(--violet-text); font-weight: 700; background: var(--violet-bg); }
+table.data .green-cell { background: rgba(236,253,245,0.5); }
+table.data .green-cell-strong { background: rgba(236,253,245,0.7); }
+
+.scale-table {
+  width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 11px;
+}
+.scale-table th, .scale-table td {
+  padding: 4px 8px; border: 1px solid var(--border); text-align: right;
+}
+.scale-table th { background: var(--head-bg); font-weight: 600; }
+.scale-table th.cat, .scale-table td.cat { text-align: left; }
+.scale-table tr.total-row td { background: var(--green-bg); font-weight: 700; color: var(--green-text); }
+.scale-table td.active-col { background: var(--green-bg); font-weight: 700; color: var(--green-text); }
+.scale-table th.active-col { background: #d1fae5; color: var(--green-text); }
+
+.scale-block { margin-bottom: 14px; }
+.scale-block h3 { font-size: 13px; margin: 8px 0 4px; color: var(--green-text); font-weight: 600; }
+
+.monthly-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+.monthly-table th, .monthly-table td { padding: 3px 5px; border: 1px solid var(--border); text-align: right; }
+.monthly-table th { background: var(--head-bg); }
+.monthly-table th.cat, .monthly-table td.cat { text-align: left; font-weight: 600; background: #f8fafc; }
+.monthly-table td.empty { color: #94a3b8; }
+.monthly-table td.total { background: #fef3c7; font-weight: 700; }
+
+.toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: #1a202c; color: white; padding: 10px 16px;
+  border-radius: 6px; font-size: 12px; opacity: 0;
+  transition: opacity .3s; pointer-events: none; z-index: 1000;
+}
+.toast.show { opacity: 1; }
+
+.hidden { display: none !important; }
+
+.empty-state {
+  text-align: center; padding: 40px 20px; color: var(--text-dim);
+  font-size: 13px;
+}
+
+@media (max-width: 768px) {
+  .app { padding: 10px; }
+  table.data { font-size: 10px; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  .card { page-break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div>
+      <div class="header-title">Калькулятор скидок для дилеров КОМПО</div>
+      <div class="header-sub">Расчёт скидок по оборудованию, расходным материалам и сервису</div>
+    </div>
+    <div class="header-actions">
+      <input type="file" id="xlsx-input" accept=".xlsx,.xls" class="hidden">
+      <button class="btn btn-blue" onclick="document.getElementById('xlsx-input').click()">Загрузить XLSX</button>
+      <button class="btn btn-green" onclick="exportExcel()">Экспорт в Excel</button>
+      <button class="btn btn-orange" onclick="exportJSON()">Сохранить данные</button>
+      <button class="btn btn-gray" onclick="resetData()">Сбросить</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="ctrl-group">
+      <div class="ctrl-label">Квартал</div>
+      <select class="ctrl-input" id="quarter-select" onchange="rerender()">
+        <option value="1">1 кв (Апр–Июн)</option>
+        <option value="2">2 кв (Июл–Сен) — H1 финал</option>
+        <option value="3">3 кв (Окт–Дек)</option>
+        <option value="4">4 кв (Янв–Мар) — H2 финал</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
+      <div class="ctrl-label">Активный дилер (для шкал)</div>
+      <select class="ctrl-input" id="dealer-select" onchange="renderScales()"></select>
+    </div>
+    <div class="ctrl-group" style="margin-left: auto;">
+      <div class="ctrl-label">Хранилище</div>
+      <div class="ctrl-row" style="font-size: 11px; color: var(--text-dim);">
+        <span id="storage-info">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="summary" onclick="switchTab('summary')">Сводная таблица</div>
+    <div class="tab" data-tab="service" onclick="switchTab('service')">Сервис (накопл.)</div>
+    <div class="tab" data-tab="scales" onclick="switchTab('scales')">Шкалы скидок</div>
+    <div class="tab" data-tab="dealer" onclick="switchTab('dealer')">Карточка дилера</div>
+  </div>
+
+  <!-- Tab: Summary -->
+  <div id="tab-summary" class="tab-content">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Сводная таблица выполнения условий</div>
+          <div class="card-sub" id="summary-sub"></div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="kpi-row" id="kpi-row"></div>
+        <div style="overflow-x: auto;">
+          <table class="data" id="summary-table"></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Service -->
+  <div id="tab-service" class="tab-content hidden">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Скидка по Сервису — накопительно</div>
+          <div class="card-sub">Накопительным итогом за расчётный период</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div style="overflow-x: auto;">
+          <table class="data" id="service-table"></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Scales -->
+  <div id="tab-scales" class="tab-content hidden">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Шкалы скидок — <span id="scales-dealer-name"></span></div>
+          <div class="card-sub">Активная колонка подсвечена (по факту выбранного квартала)</div>
+        </div>
+      </div>
+      <div class="card-body" id="scales-body" style="padding: 12px;"></div>
+    </div>
+  </div>
+
+  <!-- Tab: Dealer card -->
+  <div id="tab-dealer" class="tab-content hidden">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Карточка дилера</div>
+          <div class="card-sub">Детальный расчёт по выбранному дилеру</div>
+        </div>
+        <button class="btn btn-green no-print" onclick="window.print()">Печать</button>
+      </div>
+      <div class="card-body" id="dealer-body" style="padding: 14px;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── Seed data (DEALERS + SCALES) ─────────────────────────────────────────────
+const SEED_DEALERS = [{"id": "novapak", "name": "НоваПак", "type": "РФ", "plan": {"service": 365000, "equipment": 787000, "materials": 660000}, "facts": {"service": [12619, 24628, 18488, null, null, null, null, null, null, null, null, null], "equipment": [null, 1435, 64423, null, null, null, null, null, null, null, null, null], "materials": [71293, 74870, 113044, null, null, null, null, null, null, null, null, null]}, "servicePercent": 17.0}, {"id": "ksp", "name": "КСП", "type": "РФ", "plan": {"service": 305000, "equipment": 999000, "materials": 800000}, "facts": {"service": [5683, 18745, 19978, null, null, null, null, null, null, null, null, null], "equipment": [null, 25178, 28036, null, null, null, null, null, null, null, null, null], "materials": [36210, 63105, 67403, null, null, null, null, null, null, null, null, null]}, "servicePercent": 15.0}, {"id": "bogatov", "name": "Богатов ТД", "type": "РФ", "plan": {"service": 100000, "equipment": 650000, "materials": 900000}, "facts": {"service": [14321, 16754, 15576, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [80234, 84520, 85982, null, null, null, null, null, null, null, null, null]}, "servicePercent": 15.0}, {"id": "kompo", "name": "КОМПО Технолоджис", "type": "РФ", "plan": {"service": 480438, "equipment": 2020594, "materials": 1641880}, "facts": {"service": [33874, 33700, 34068, null, null, null, null, null, null, null, null, null], "equipment": [null, 125140, 190275, null, null, null, null, null, null, null, null, null], "materials": [170011, 175678, 191343, null, null, null, null, null, null, null, null, null]}, "servicePercent": 19.0}, {"id": "abs", "name": "ABS", "type": "Заруб", "plan": {"service": 75000, "equipment": 700000, "materials": 400000}, "facts": {"service": [1420, null, null, null, null, null, null, null, null, null, null, null], "equipment": [47129, 47129, 47128, null, null, null, null, null, null, null, null, null], "materials": [50745, 50745, 50744, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "deling", "name": "Deling Food", "type": "Заруб", "plan": {"service": 75000, "equipment": 250000, "materials": 315000}, "facts": {"service": [12455, 12455, 12456, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [35124, 35124, 35125, null, null, null, null, null, null, null, null, null]}, "servicePercent": 15.0}, {"id": "vitline", "name": "VitLine", "type": "Заруб", "plan": {"service": 100000, "equipment": 315000, "materials": 900000}, "facts": {"service": [7597, 7597, 7596, null, null, null, null, null, null, null, null, null], "equipment": [15541, 15540, 15541, null, null, null, null, null, null, null, null, null], "materials": [53037, 53036, 53037, null, null, null, null, null, null, null, null, null]}, "servicePercent": 13.0}, {"id": "universal", "name": "Universal Meat", "type": "Заруб", "plan": {"service": 50000, "equipment": 200000, "materials": 250000}, "facts": {"service": [12754, 12754, 12754, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": 15.0}, {"id": "kna", "name": "KNA", "type": "Заруб", "plan": {"service": 50000, "equipment": 150000, "materials": 150000}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [1419, 1419, 1420, null, null, null, null, null, null, null, null, null], "materials": [18583, 18583, 18582, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}, {"id": "lucky", "name": "LUCKY & S CO", "type": "Заруб", "plan": {"service": 50000, "equipment": 400000, "materials": 150000}, "facts": {"service": [2442, 2442, 2442, null, null, null, null, null, null, null, null, null], "equipment": [5847, 5847, 5847, null, null, null, null, null, null, null, null, null], "materials": [6188, 6188, 6188, null, null, null, null, null, null, null, null, null]}, "servicePercent": 11.0}, {"id": "seitliyev", "name": "Сейитлиев", "type": "Заруб", "plan": {"service": 50000, "equipment": 75000, "materials": 560000}, "facts": {"service": [1505, 1505, 1506, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [32386, 32386, 32387, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "ingreda", "name": "Ingreda", "type": "Заруб", "plan": {"service": 0, "equipment": 75000, "materials": 130000}, "facts": {"service": [194, 195, 194, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [8653, 8653, 8653, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "clipsomac", "name": "CLIPSOMAC", "type": "Заруб", "plan": {"service": 0, "equipment": 0, "materials": 338375}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}, {"id": "tida", "name": "Tida Tech", "type": "Заруб", "plan": {"service": 3068, "equipment": 3578, "materials": 66004}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}, {"id": "kabiri", "name": "Кабири Хучанд", "type": "Заруб", "plan": {"service": 0, "equipment": 75000, "materials": 75000}, "facts": {"service": [174, 174, 175, null, null, null, null, null, null, null, null, null], "equipment": [7098, 7098, 7098, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "ari", "name": "Ari Makina", "type": "Заруб", "plan": {"service": 0, "equipment": 104744, "materials": 0}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}, {"id": "flexo", "name": "Flexo Food", "type": "Заруб", "plan": {"service": 0, "equipment": 75000, "materials": 75000}, "facts": {"service": [445, 445, 445, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [1722, 1722, 1721, null, null, null, null, null, null, null, null, null]}, "servicePercent": 10.0}, {"id": "ginap", "name": "ГИНАП", "type": "Заруб", "plan": {"service": 25000, "equipment": 75000, "materials": 75000}, "facts": {"service": [null, null, null, null, null, null, null, null, null, null, null, null], "equipment": [null, null, null, null, null, null, null, null, null, null, null, null], "materials": [null, null, null, null, null, null, null, null, null, null, null, null]}, "servicePercent": null}];
+const SEED_SCALES = [{"title": "Оборудование — за квартал", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Складские остатки (ретро)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок Оборудование", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}, {"component": "ИТОГО", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}]}, {"title": "Расходные материалы — за квартал", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Складские остатки Расход. мат.", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок Расход. мат.", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}, {"component": "ИТОГО", "values": ["1%", "2%", "3%", "4%", "5%", "6%"], "isTotal": true}]}, {"title": "Сервис (ЗЧ) — расчёт по парку оборудования", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Сервис + гарантия", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок", "values": ["7%", "9%", "10%", "11%", "12%", "13%"]}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}]}, {"title": "Система контроля (штрафы)", "columns": ["до 24", "25–34", "35–44", "45–54", "55–64", "65+"], "rows": [{"component": "Объём закупок Расход. мат.", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}]}, {"title": "Оборудование — за полугодие", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Сервисный центр", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Гарантийное обслуживание", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Складские остатки (ретро)", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок Оборудование", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}, {"component": "ИТОГО", "values": ["14%", "15%", "16%", "17%", "18%", "19%"], "isTotal": true}]}, {"title": "Расходные материалы — за полугодие", "columns": ["до 75", "75–115", "115–150", "150–190", "190–225", "225+"], "rows": [{"component": "Складские остатки Расход. мат.", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок Расход. мат.", "values": ["0%", "1%", "2%", "3%", "4%", "5%"]}, {"component": "ИТОГО", "values": ["1%", "2%", "3%", "4%", "5%", "6%"], "isTotal": true}]}, {"title": "Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев", "columns": ["до 75", "75–114", "115–149", "150–189", "190–224", "225+"], "rows": [{"component": "Базовое вознаграждение", "values": ["6%", "6%", "6%", "6%", "6%", "6%"]}, {"component": "Сервис + гарантия", "values": ["1%", "1%", "1%", "1%", "1%", "1%"]}, {"component": "Объём закупок", "values": ["7%", "9%", "10%", "11%", "12%", "13%"]}, {"component": "ИТОГО", "values": ["14%", "16%", "17%", "18%", "19%", "20%"], "isTotal": true}]}];
+const MONTH_LABELS = ["Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек", "Янв", "Фев", "Мар"];
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let state = {
+  quarter: 1,
+  dealers: JSON.parse(JSON.stringify(SEED_DEALERS)),
+  scales: JSON.parse(JSON.stringify(SEED_SCALES)),
+};
+
+const STORAGE_KEY = 'kompo-discount-calc-v1';
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateStorageInfo();
+  } catch (e) { console.warn('save failed', e); }
+}
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.dealers && parsed.scales) {
+        state = parsed;
+        return true;
+      }
+    }
+  } catch (e) { console.warn('load failed', e); }
+  return false;
+}
+
+function updateStorageInfo() {
+  const el = document.getElementById('storage-info');
+  if (!el) return;
+  const size = new Blob([JSON.stringify(state)]).size;
+  const dealersCount = state.dealers.length;
+  const hasSaved = localStorage.getItem(STORAGE_KEY) !== null;
+  el.textContent = hasSaved
+    ? `${dealersCount} дилеров в памяти браузера (${(size/1024).toFixed(1)} KB)`
+    : 'несохранённые данные';
+}
+
+// ─── Calc helpers (ported from src/lib/calc.ts) ───────────────────────────────
+function sumYear(values) {
+  const filtered = values.filter(v => v !== null);
+  if (filtered.length === 0) return null;
+  return filtered.reduce((a,b) => a+b, 0);
+}
+
+function sumQuarter(values, q) {
+  const start = (q-1)*3;
+  return sumYear(values.slice(start, start+3));
+}
+
+function hasFacts(values) {
+  return values.some(v => v !== null);
+}
+
+function quarterlyFactsByCategory(dealer, q) {
+  const months = q === 1 ? [0,1,2] : q === 2 ? [3,4,5] : q === 3 ? [6,7,8] : [9,10,11];
+  const pick = (arr) => {
+    const slice = months.map(i => arr[i]);
+    if (!hasFacts(slice)) return null;
+    return slice.reduce((a,b) => a + (b ?? 0), 0);
+  };
+  return {
+    service: pick(dealer.facts.service),
+    equipment: pick(dealer.facts.equipment),
+    materials: pick(dealer.facts.materials),
+  };
+}
+
+function halfYearFactsByCategory(dealer, q) {
+  const months = q === 1 ? [0,1,2] : q === 2 ? [0,1,2,3,4,5] : q === 3 ? [6,7,8] : [6,7,8,9,10,11];
+  const pick = (arr) => {
+    const slice = months.map(i => arr[i]);
+    if (!hasFacts(slice)) return null;
+    return slice.reduce((a,b) => a + (b ?? 0), 0);
+  };
+  return {
+    service: pick(dealer.facts.service),
+    equipment: pick(dealer.facts.equipment),
+    materials: pick(dealer.facts.materials),
+  };
+}
+
+function effectiveFactsByCategory(dealer, q) {
+  if (dealer.type === 'Заруб') return halfYearFactsByCategory(dealer, q);
+  return quarterlyFactsByCategory(dealer, q);
+}
+
+function effectivePlanTotal(dealer, q) {
+  const annual = dealer.plan.equipment + dealer.plan.materials + dealer.plan.service;
+  if (dealer.type === 'Заруб') return Math.round(annual / 2);
+  return Math.round(annual / 4);
+}
+
+function serviceFactAccumulated(dealer) {
+  return sumYear(dealer.facts.service.months || dealer.facts.service);
+}
+
+// ─── Discount calc (ported from src/lib/discount.ts) ──────────────────────────
+const MIN_EQUIPMENT_DISCOUNT_PCT = 14;
+
+function parseTier(col) {
+  const s = col.trim().toLowerCase();
+  let m = s.match(/^до\s+(\d+(?:[.,]\d+)?)/);
+  if (m) return { min: 0, max: Number(m[1].replace(',', '.')) };
+  m = s.match(/^(?:от\s+)?(\d+(?:[.,]\d+)?)\s*(?:\+|(?:и\s+более)|$)/);
+  if (m && (s.includes('+') || s.includes('более') || s.startsWith('от'))) {
+    return { min: Number(m[1].replace(',', '.')) };
+  }
+  m = s.match(/^(\d+(?:[.,]\d+)?)\s*[–—-]\s*(\d+(?:[.,]\d+)?)/);
+  if (m) return { min: Number(m[1].replace(',', '.')), max: Number(m[2].replace(',', '.')) };
+  m = s.match(/^(\d+(?:[.,]\d+)?)$/);
+  if (m) return { min: 0, max: Number(m[1].replace(',', '.')) };
+  return {};
+}
+
+function parsePct(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return v;
+  const s = String(v).trim().replace('%', '').replace(',', '.').trim();
+  if (s === '' || s === '—') return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function findTierColumn(columns, volume) {
+  for (let i = 0; i < columns.length; i++) {
+    const t = parseTier(columns[i]);
+    const min = t.min ?? -Infinity;
+    const max = t.max ?? Infinity;
+    if (volume >= min && volume <= max) return i;
+  }
+  if (columns.length === 0) return -1;
+  if (volume <= 0) return 0;
+  return columns.length - 1;
+}
+
+function findScaleTable(scales, titlePart) {
+  if (!scales || scales.length === 0) return null;
+  const lc = titlePart.toLowerCase();
+  return scales.find(s => s.title.toLowerCase().includes(lc)) ?? null;
+}
+
+function findTotalRow(table) {
+  return table.rows.findIndex(r =>
+    r.component.toLowerCase().includes('итого') || r.component.toLowerCase().includes('всего')
+  );
+}
+
+function calcEquipmentDiscountPct(dealer, quarter) {
+  // Use SEED_SCALES (no per-dealer scales in this static build)
+  const table = findScaleTable(state.scales, 'Оборудование');
+  if (!table) return null;
+  let equipmentFact;
+  if (dealer.type === 'Заруб') {
+    equipmentFact = halfYearFactsByCategory(dealer, quarter).equipment;
+  } else {
+    equipmentFact = quarterlyFactsByCategory(dealer, quarter).equipment;
+  }
+  if (equipmentFact === null) return null;
+  const volume = equipmentFact / 1000;
+  const colIdx = findTierColumn(table.columns, volume);
+  if (colIdx < 0) return null;
+  let raw = null;
+  const totalRowIdx = findTotalRow(table);
+  if (totalRowIdx >= 0) {
+    raw = parsePct(table.rows[totalRowIdx].values[colIdx]);
+  } else {
+    let sum = 0, hasAny = false;
+    for (const row of table.rows) {
+      const v = parsePct(row.values[colIdx]);
+      if (v !== null) { sum += v; hasAny = true; }
+    }
+    raw = hasAny ? sum : null;
+  }
+  if (raw !== null && raw < MIN_EQUIPMENT_DISCOUNT_PCT) {
+    return MIN_EQUIPMENT_DISCOUNT_PCT;
+  }
+  return raw;
+}
+
+function calcMaterialsDiscountPctSplit(dealer, quarter) {
+  const table = findScaleTable(state.scales, 'Расходные');
+  if (!table) return { volume: null, minStock: null };
+  let materialsFact;
+  if (dealer.type === 'Заруб') {
+    materialsFact = halfYearFactsByCategory(dealer, quarter).materials;
+  } else {
+    materialsFact = quarterlyFactsByCategory(dealer, quarter).materials;
+  }
+  if (materialsFact === null) return { volume: null, minStock: null };
+  const volume = materialsFact / 1000;
+  const colIdx = findTierColumn(table.columns, volume);
+  if (colIdx < 0) return { volume: null, minStock: null };
+  let volVal = null, minVal = null;
+  for (const row of table.rows) {
+    const lc = row.component.toLowerCase();
+    if (lc.includes('итого') || lc.includes('всего')) continue;
+    const v = parsePct(row.values[colIdx]);
+    if (v === null) continue;
+    if (lc.includes('остатк') || lc.includes('миним')) {
+      minVal = (minVal ?? 0) + v;
+    } else {
+      volVal = (volVal ?? 0) + v;
+    }
+  }
+  return { volume: volVal, minStock: minVal };
+}
+
+function calcServiceDiscountPct(dealer, quarter) {
+  if (dealer.type === 'РФ') {
+    const eqTable = findScaleTable(state.scales, 'Оборудование');
+    if (!eqTable) return null;
+    const facts = quarterlyFactsByCategory(dealer, quarter);
+    const hasAny = facts.service !== null || facts.equipment !== null || facts.materials !== null;
+    if (!hasAny) return null;
+    const q1Total = (facts.service ?? 0) + (facts.equipment ?? 0) + (facts.materials ?? 0);
+    if (q1Total === 0) return null;
+    const volume = q1Total / 2500;
+    const colIdx = findTierColumn(eqTable.columns, volume);
+    if (colIdx < 0) return null;
+    const totalRowIdx = findTotalRow(eqTable);
+    if (totalRowIdx >= 0) {
+      return parsePct(eqTable.rows[totalRowIdx].values[colIdx]);
+    }
+    return null;
+  }
+  // Заруб: use service scale
+  const table = findScaleTable(state.scales, 'Сервис');
+  if (!table) return null;
+  const fact = serviceFactAccumulated(dealer);
+  if (fact === null || fact === 0) return null;
+  const colIdx = findTierColumn(table.columns, fact);
+  if (colIdx < 0) return null;
+  const row = table.rows[0];
+  if (!row) return null;
+  return parsePct(row.values[colIdx]);
+}
+
+function getServiceDiscountPctNormalized(dealer, quarter) {
+  const pct = calcServiceDiscountPct(dealer, quarter);
+  if (pct === null) return null;
+  return pct < 1 ? pct * 100 : pct;
+}
+
+// ─── Format helpers ───────────────────────────────────────────────────────────
+function fmt(n, suffix = '') {
+  if (n === null || n === undefined) return '—';
+  const rounded = Math.round(n);
+  if (Math.abs(n - rounded) < 0.01) {
+    return rounded.toLocaleString('ru-RU').replace(/\u00A0/g, ' ') + suffix;
+  }
+  return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).replace(/\u00A0/g, ' ') + suffix;
+}
+
+function fmtPct(n, digits = 1) {
+  if (n === null || n === undefined) return '—';
+  return n.toFixed(digits) + '%';
+}
+
+function quarterMonthRange(q) {
+  const start = (q-1)*3;
+  return MONTH_LABELS[start] + '–' + MONTH_LABELS[start+2];
+}
+
+function halfYearMonthRange(q) {
+  if (q <= 2) return MONTH_LABELS[0] + '–' + MONTH_LABELS[5];
+  return MONTH_LABELS[6] + '–' + MONTH_LABELS[11];
+}
+
+// ─── Sorting state ────────────────────────────────────────────────────────────
+let summarySort = { key: 'name', dir: 'asc' };
+let serviceSort = { key: 'name', dir: 'asc' };
+
+function cmp(a, b, dir) {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return dir === 'asc' ? a - b : b - a;
+}
+
+function cmpStr(a, b, dir) {
+  const r = a.localeCompare(b, 'ru');
+  return dir === 'asc' ? r : -r;
+}
+
+// ─── Rendering ────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+  document.getElementById('tab-' + name).classList.remove('hidden');
+  if (name === 'scales') renderScales();
+  if (name === 'dealer') renderDealerCard();
+}
+
+function rerender() {
+  state.quarter = Number(document.getElementById('quarter-select').value);
+  renderSummary();
+  renderService();
+  if (!document.getElementById('tab-scales').classList.contains('hidden')) renderScales();
+  if (!document.getElementById('tab-dealer').classList.contains('hidden')) renderDealerCard();
+  saveState();
+}
+
+function renderSummary() {
+  const q = state.quarter;
+  document.getElementById('summary-sub').textContent =
+    `РФ: за ${q} кв. (${quarterMonthRange(q)}) • Заруб: за ${q <= 2 ? 1 : 2} п/г (${halfYearMonthRange(q)})`;
+
+  // KPIs
+  const rfDealers = state.dealers.filter(d => d.type === 'РФ');
+  const foreignDealers = state.dealers.filter(d => d.type === 'Заруб');
+  const planTotal = state.dealers.reduce((s, d) =>
+    s + effectivePlanTotal(d, q), 0);
+  const factTotal = state.dealers.reduce((s, d) => {
+    const f = effectiveFactsByCategory(d, q);
+    const has = f.service !== null || f.equipment !== null || f.materials !== null;
+    return s + (has ? (f.service ?? 0) + (f.equipment ?? 0) + (f.materials ?? 0) : 0);
+  }, 0);
+  const withFacts = state.dealers.filter(d => {
+    const f = effectiveFactsByCategory(d, q);
+    return f.service !== null || f.equipment !== null || f.materials !== null;
+  }).length;
+  const execPct = planTotal > 0 ? Math.round((factTotal / planTotal) * 100) : 0;
+
+  document.getElementById('kpi-row').innerHTML = `
+    <div class="kpi"><div class="kpi-label">РФ дилеров</div><div class="kpi-value">${rfDealers.length}</div><div class="kpi-sub">российские</div></div>
+    <div class="kpi"><div class="kpi-label">Заруб дилеров</div><div class="kpi-value">${foreignDealers.length}</div><div class="kpi-sub">зарубежные</div></div>
+    <div class="kpi"><div class="kpi-label">План</div><div class="kpi-value">${fmt(planTotal, ' €')}</div><div class="kpi-sub">за период</div></div>
+    <div class="kpi"><div class="kpi-label">Факт</div><div class="kpi-value">${fmt(factTotal, ' €')}</div><div class="kpi-sub">за период</div></div>
+    <div class="kpi"><div class="kpi-label">Выполнение</div><div class="kpi-value">${execPct}%</div><div class="kpi-sub">${withFacts} с данными</div></div>
+  `;
+
+  // Build rows
+  const rows = state.dealers.map(d => {
+    const plan = effectivePlanTotal(d, q) ?? 0;
+    const facts = effectiveFactsByCategory(d, q);
+    const hasFact = facts.service !== null || facts.equipment !== null || facts.materials !== null;
+    const factTotal = hasFact
+      ? (facts.service ?? 0) + (facts.equipment ?? 0) + (facts.materials ?? 0)
+      : null;
+    const execPct = factTotal === null || plan === 0 ? null : Math.round((factTotal / plan) * 100);
+    const eqPlan = d.type === 'Заруб' ? d.plan.equipment / 2 : d.plan.equipment / 4;
+    const matPlan = d.type === 'Заруб' ? d.plan.materials / 2 : d.plan.materials / 4;
+    const eqPct = calcEquipmentDiscountPct(d, q);
+    const matSplit = calcMaterialsDiscountPctSplit(d, q);
+    return { d, plan, facts, factTotal, execPct, eqPlan, matPlan, eqPct, matVolPct: matSplit.volume, matMinPct: matSplit.minStock };
+  });
+
+  // Sort
+  const { key, dir } = summarySort;
+  rows.sort((a, b) => {
+    switch (key) {
+      case 'name': return cmpStr(a.d.name, b.d.name, dir);
+      case 'type': return cmpStr(a.d.type, b.d.type, dir);
+      case 'plan': return cmp(a.plan, b.plan, dir);
+      case 'fact': return cmp(a.factTotal, b.factTotal, dir);
+      case 'exec': return cmp(a.execPct, b.execPct, dir);
+      case 'eqPlan': return cmp(a.eqPlan, b.eqPlan, dir);
+      case 'eqFact': return cmp(a.facts.equipment, b.facts.equipment, dir);
+      case 'eqPct': return cmp(a.eqPct, b.eqPct, dir);
+      case 'matPlan': return cmp(a.matPlan, b.matPlan, dir);
+      case 'matFact': return cmp(a.facts.materials, b.facts.materials, dir);
+      case 'matVolPct': return cmp(a.matVolPct, b.matVolPct, dir);
+      case 'matMinPct': return cmp(a.matMinPct, b.matMinPct, dir);
+    }
+  });
+
+  // Render
+  const table = document.getElementById('summary-table');
+  const sortInd = (k) => {
+    if (summarySort.key !== k) return '<span class="sort-ind">⇅</span>';
+    return `<span class="sort-ind">${dir === 'asc' ? '▲' : '▼'}</span>`;
+  };
+  const head = (k, label, cls = '') =>
+    `<th class="sortable ${summarySort.key === k ? 'active' : ''} ${cls}" onclick="toggleSummarySort('${k}')">${label}${sortInd(k)}</th>`;
+
+  table.innerHTML = `
+    <colgroup>
+      <col style="width:16%"><col style="width:4%"><col style="width:8%"><col style="width:8%"><col style="width:5%">
+      <col style="width:8%"><col style="width:8%"><col style="width:7%">
+      <col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:7%">
+    </colgroup>
+    <thead>
+      <tr>
+        ${head('name', 'Дилер', 'cat')} ${head('type', 'Тип', 'text-center')} ${head('plan', 'План')} ${head('fact', 'Факт')} ${head('exec', 'Вып.', 'text-center')}
+        <th colspan="3" class="text-center green-cell-strong">Оборудование</th>
+        <th colspan="4" class="text-center green-cell-strong">Расходные материалы</th>
+      </tr>
+      <tr>
+        <th colspan="5"></th>
+        ${head('eqPlan', 'План', 'green-cell')} ${head('eqFact', 'Факт', 'green-cell')} ${head('eqPct', 'Скид. %', 'green-cell')}
+        ${head('matPlan', 'План', 'green-cell')} ${head('matFact', 'Факт', 'green-cell')} ${head('matVolPct', 'Скид. % (объём)', 'green-cell')} ${head('matMinPct', 'Скид. % (мин. ост.)', 'green-cell')}
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(r => {
+        const d = r.d;
+        const noData = r.factTotal === null;
+        const period = d.type === 'Заруб' ? 'пг' : 'кв';
+        return `<tr class="${noData ? 'no-data' : ''}">
+          <td class="cat" title="${d.name}">${d.name}</td>
+          <td class="text-center"><span class="badge ${d.type === 'РФ' ? 'badge-rf' : 'badge-zarub'}">${d.type}</span></td>
+          <td>${r.plan === 0 ? '—' : fmt(r.plan) + ' / ' + period}</td>
+          <td>${r.factTotal === null ? 'нет' : fmt(r.factTotal) + ' / ' + period}</td>
+          <td class="text-center">${r.execPct === null ? '—' : r.execPct + '%'}</td>
+          <td class="green-cell">${fmt(Math.round(r.eqPlan), ' €')}</td>
+          <td class="green-cell">${fmt(r.facts.equipment, ' €')}</td>
+          <td class="green-cell discount">${fmtPct(r.eqPct)}</td>
+          <td class="green-cell">${fmt(Math.round(r.matPlan), ' €')}</td>
+          <td class="green-cell">${fmt(r.facts.materials, ' €')}</td>
+          <td class="green-cell discount">${fmtPct(r.matVolPct)}</td>
+          <td class="green-cell discount">${fmtPct(r.matMinPct)}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  `;
+}
+
+function toggleSummarySort(k) {
+  if (summarySort.key === k) summarySort.dir = summarySort.dir === 'asc' ? 'desc' : 'asc';
+  else { summarySort.key = k; summarySort.dir = (k === 'name' || k === 'type') ? 'asc' : 'desc'; }
+  renderSummary();
+}
+
+function renderService() {
+  const q = state.quarter;
+  const rows = state.dealers.map(d => {
+    const sp = d.plan.service;
+    const sf = serviceFactAccumulated(d);
+    const exec = sf === null ? null : sp === 0 ? null : Math.round((sf / sp) * 100);
+    const pct = getServiceDiscountPctNormalized(d, q);
+    return { d, sp, sf, exec, pct };
+  });
+
+  const { key, dir } = serviceSort;
+  rows.sort((a, b) => {
+    switch (key) {
+      case 'name': return cmpStr(a.d.name, b.d.name, dir);
+      case 'type': return cmpStr(a.d.type, b.d.type, dir);
+      case 'svcPlan': return cmp(a.sp, b.sp, dir);
+      case 'svcFact': return cmp(a.sf, b.sf, dir);
+      case 'svcExec': return cmp(a.exec, b.exec, dir);
+      case 'svcPct': return cmp(a.pct, b.pct, dir);
+    }
+  });
+
+  const table = document.getElementById('service-table');
+  const sortInd = (k) => {
+    if (serviceSort.key !== k) return '<span class="sort-ind">⇅</span>';
+    return `<span class="sort-ind">${dir === 'asc' ? '▲' : '▼'}</span>`;
+  };
+  const head = (k, label, cls = '') =>
+    `<th class="sortable ${serviceSort.key === k ? 'active' : ''} ${cls}" onclick="toggleServiceSort('${k}')">${label}${sortInd(k)}</th>`;
+
+  table.innerHTML = `
+    <colgroup>
+      <col style="width:30%"><col style="width:7%"><col style="width:16%"><col style="width:16%"><col style="width:12%"><col style="width:19%">
+    </colgroup>
+    <thead>
+      <tr>
+        ${head('name', 'Дилер', 'cat')} ${head('type', 'Тип', 'text-center')}
+        ${head('svcPlan', 'План Сервис (год)')} ${head('svcFact', 'Факт Сервис (накопл.)')}
+        ${head('svcExec', 'Выполн.', 'text-center')} ${head('svcPct', 'Сервис %', 'discount-violet')}
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(r => {
+        const d = r.d;
+        const noData = r.sf === null;
+        return `<tr class="${noData ? 'no-data' : ''}">
+          <td class="cat" title="${d.name}">${d.name}</td>
+          <td class="text-center"><span class="badge ${d.type === 'РФ' ? 'badge-rf' : 'badge-zarub'}">${d.type}</span></td>
+          <td>${fmt(r.sp)}</td>
+          <td>${r.sf === null ? 'нет' : fmt(r.sf)}</td>
+          <td class="text-center">${r.exec === null ? '—' : r.exec + '%'}</td>
+          <td class="discount-violet">${fmtPct(r.pct)}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  `;
+}
+
+function toggleServiceSort(k) {
+  if (serviceSort.key === k) serviceSort.dir = serviceSort.dir === 'asc' ? 'desc' : 'asc';
+  else { serviceSort.key = k; serviceSort.dir = (k === 'name' || k === 'type') ? 'asc' : 'desc'; }
+  renderService();
+}
+
+function populateDealerSelect() {
+  const sel = document.getElementById('dealer-select');
+  sel.innerHTML = state.dealers.map(d =>
+    `<option value="${d.id}">${d.name} (${d.type})</option>`
+  ).join('');
+}
+
+function renderScales() {
+  const dealerId = document.getElementById('dealer-select').value;
+  const dealer = state.dealers.find(d => d.id === dealerId) ?? state.dealers[0];
+  document.getElementById('scales-dealer-name').textContent =
+    dealer.name + ' (' + dealer.type + ')';
+
+  const q = state.quarter;
+  const body = document.getElementById('scales-body');
+
+  // Determine active columns
+  const eqFact = dealer.type === 'Заруб'
+    ? halfYearFactsByCategory(dealer, q).equipment
+    : quarterlyFactsByCategory(dealer, q).equipment;
+  const matFact = dealer.type === 'Заруб'
+    ? halfYearFactsByCategory(dealer, q).materials
+    : quarterlyFactsByCategory(dealer, q).materials;
+  const svcFact = serviceFactAccumulated(dealer);
+
+  const eqScale = findScaleTable(state.scales, 'Оборудование');
+  const matScale = findScaleTable(state.scales, 'Расходные');
+  const svcScale = findScaleTable(state.scales, 'Сервис');
+
+  const eqColIdx = eqFact === null ? -1 : findTierColumn(eqScale.columns, eqFact / 1000);
+  const matColIdx = matFact === null ? -1 : findTierColumn(matScale.columns, matFact / 1000);
+  const svcColIdx = svcFact === null || svcFact === 0 ? -1 : findTierColumn(svcScale.columns, svcFact);
+
+  const renderScale = (s, activeIdx, factLabel, factValue) => {
+    if (!s) return '<p class="empty-state">Шкала не найдена</p>';
+    const cols = s.columns.map((c, i) =>
+      `<th class="${i === activeIdx ? 'active-col' : ''}">${c}</th>`
+    ).join('');
+    const rows = s.rows.map(r => {
+      const isTotal = r.isTotal || r.component.toLowerCase().includes('итого');
+      const cells = r.values.map((v, i) =>
+        `<td class="${i === activeIdx ? 'active-col' : ''}">${v}</td>`
+      ).join('');
+      return `<tr class="${isTotal ? 'total-row' : ''}"><td class="cat">${r.component}</td>${cells}</tr>`;
+    }).join('');
+    return `
+      <div class="scale-block">
+        <h3>${s.title}</h3>
+        <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 6px;">
+          ${factLabel}: <b>${factValue}</b>
+        </div>
+        <table class="scale-table">
+          <thead><tr><th class="cat">Компонент</th>${cols}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  body.innerHTML =
+    renderScale(eqScale, eqColIdx, 'Факт (за период)', fmt(eqFact, ' €') + ' → ' + (eqFact === null ? 'нет данных' : (eqFact/1000).toFixed(1) + ' тыс. €')) +
+    renderScale(matScale, matColIdx, 'Факт (за период)', fmt(matFact, ' €') + ' → ' + (matFact === null ? 'нет данных' : (matFact/1000).toFixed(1) + ' тыс. €')) +
+    renderScale(svcScale, svcColIdx, 'Факт (накопл. 12 мес.)', fmt(svcFact, ' €'));
+}
+
+function renderDealerCard() {
+  const dealerId = document.getElementById('dealer-select').value;
+  const d = state.dealers.find(d => d.id === dealerId) ?? state.dealers[0];
+  const q = state.quarter;
+  const body = document.getElementById('dealer-body');
+
+  const planEq = d.plan.equipment, planMat = d.plan.materials, planSvc = d.plan.service;
+  const planTotal = planEq + planMat + planSvc;
+  const factEq = sumYear(d.facts.equipment) ?? 0;
+  const factMat = sumYear(d.facts.materials) ?? 0;
+  const factSvc = sumYear(d.facts.service) ?? 0;
+  const factTotal = factEq + factMat + factSvc;
+
+  const isZarub = d.type === 'Заруб';
+  const qf = isZarub ? halfYearFactsByCategory(d, q) : quarterlyFactsByCategory(d, q);
+  const qFactEq = qf.equipment ?? 0;
+  const qFactMat = qf.materials ?? 0;
+  const qFactSvc = qf.service ?? 0;
+
+  const periodLabel = isZarub
+    ? `за ${q <= 2 ? 1 : 2} п/г (${quarterMonthRange(q)}) — накопительно до ${q} кв.`
+    : `за ${q} кв. (${quarterMonthRange(q)})`;
+
+  const eqPct = calcEquipmentDiscountPct(d, q);
+  const matSplit = calcMaterialsDiscountPctSplit(d, q);
+  const svcPct = getServiceDiscountPctNormalized(d, q);
+
+  const monthlyRow = (label, months) => {
+    const total = sumYear(months) ?? 0;
+    const cells = months.map(v => v === null ? '<td class="empty">—</td>' : `<td>${fmt(v, '')}</td>`).join('');
+    return `<tr><td class="cat">${label}</td>${cells}<td class="total">${fmt(total, '')}</td></tr>`;
+  };
+
+  body.innerHTML = `
+    <div style="background: var(--green-bg); border: 1px solid var(--green-border); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; font-size: 13px;">
+      <b style="color: var(--green-text);">${d.name}</b>
+      <span style="margin-left: 12px; color: #475569;">План: ${fmt(planTotal, ' €')}</span>
+      <span style="margin-left: 12px; color: #475569;">Выручка: ${fmt(factTotal, ' €')}</span>
+      <span style="margin-left: 12px; color: #475569;">Тип: ${d.type}</span>
+    </div>
+
+    <h3 style="font-size: 13px; color: var(--head-text); margin: 14px 0 6px;">Категории — план / факт / выполнение / скидка (${periodLabel})</h3>
+    <table class="scale-table" style="font-size: 11px;">
+      <thead>
+        <tr>
+          <th class="cat">Категория</th>
+          <th>План год</th>
+          <th>Факт год</th>
+          <th>Факт ${q} кв.</th>
+          <th>Скидка % (объём)</th>
+          <th>Скидка % (мин. ост.)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="cat">Оборудование</td>
+          <td>${fmt(planEq, ' €')}</td>
+          <td>${fmt(factEq, ' €')}</td>
+          <td>${fmt(qFactEq, ' €')}</td>
+          <td style="background: var(--green-bg); color: var(--green-text); font-weight: 700;">${fmtPct(eqPct)}</td>
+          <td style="background: var(--green-bg); color: var(--green-text); font-weight: 700;">—</td>
+        </tr>
+        <tr>
+          <td class="cat">Расход. мат.</td>
+          <td>${fmt(planMat, ' €')}</td>
+          <td>${fmt(factMat, ' €')}</td>
+          <td>${fmt(qFactMat, ' €')}</td>
+          <td style="background: var(--green-bg); color: var(--green-text); font-weight: 700;">${fmtPct(matSplit.volume)}</td>
+          <td style="background: var(--green-bg); color: var(--green-text); font-weight: 700;">${fmtPct(matSplit.minStock)}</td>
+        </tr>
+        <tr class="total-row">
+          <td class="cat">Итого</td>
+          <td>${fmt(planEq + planMat, ' €')}</td>
+          <td>${fmt(factEq + factMat, ' €')}</td>
+          <td>${fmt(qFactEq + qFactMat, ' €')}</td>
+          <td>${eqPct !== null && matSplit.volume !== null ? fmtPct(eqPct + matSplit.volume) : '—'}</td>
+          <td>${fmtPct(matSplit.minStock)}</td>
+        </tr>
+        <tr>
+          <td class="cat">Сервис</td>
+          <td>${fmt(planSvc, ' €')}</td>
+          <td>${factSvc > 0 ? fmt(factSvc, ' €') : '—'}</td>
+          <td>${fmt(qFactSvc, ' €')}</td>
+          <td style="background: var(--violet-bg); color: var(--violet-text); font-weight: 700;">${fmtPct(svcPct)}</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="font-size: 13px; color: var(--head-text); margin: 14px 0 6px;">Помесячные отгрузки (Апр → Мар)</h3>
+    <table class="monthly-table">
+      <thead>
+        <tr>
+          <th class="cat">Категория</th>
+          ${MONTH_LABELS.map(m => `<th>${m}</th>`).join('')}
+          <th class="total">Итог</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${monthlyRow('Оборудование', d.facts.equipment)}
+        ${monthlyRow('Расход. мат.', d.facts.materials)}
+        ${monthlyRow('Сервис', d.facts.service)}
+      </tbody>
+    </table>
+
+    <div style="margin-top: 16px; font-size: 10px; color: var(--text-dim); text-align: center;">
+      Документ сформирован статической версией приложения • КОМПО • ${new Date().toLocaleDateString('ru-RU')}
+    </div>
+  `;
+}
+
+// ─── Excel export (using SheetJS) ─────────────────────────────────────────────
+function exportExcel() {
+  const q = state.quarter;
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Summary
+  const summaryData = [['Дилер', 'Тип', 'План / период', 'Факт / период', 'Вып. %',
+    'EQ План €', 'EQ Факт €', 'EQ Скид. %',
+    'MAT План €', 'MAT Факт €', 'MAT Скид. % (объём)', 'MAT Скид. % (мин. ост.)']];
+  state.dealers.forEach(d => {
+    const plan = effectivePlanTotal(d, q) ?? 0;
+    const facts = effectiveFactsByCategory(d, q);
+    const hasFact = facts.service !== null || facts.equipment !== null || facts.materials !== null;
+    const factTotal = hasFact ? (facts.service ?? 0) + (facts.equipment ?? 0) + (facts.materials ?? 0) : null;
+    const execPct = factTotal === null || plan === 0 ? null : Math.round((factTotal / plan) * 100);
+    const eqPlan = d.type === 'Заруб' ? d.plan.equipment / 2 : d.plan.equipment / 4;
+    const matPlan = d.type === 'Заруб' ? d.plan.materials / 2 : d.plan.materials / 4;
+    const eqPct = calcEquipmentDiscountPct(d, q);
+    const matSplit = calcMaterialsDiscountPctSplit(d, q);
+    summaryData.push([
+      d.name, d.type, plan, factTotal, execPct,
+      Math.round(eqPlan), facts.equipment, eqPct,
+      Math.round(matPlan), facts.materials, matSplit.volume, matSplit.minStock,
+    ]);
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+  ws1['!cols'] = [{wch:22},{wch:7},{wch:14},{wch:14},{wch:8},{wch:12},{wch:12},{wch:10},{wch:12},{wch:12},{wch:18},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Сводная');
+
+  // Sheet 2: Service
+  const svcData = [['Дилер', 'Тип', 'План Сервис (год)', 'Факт Сервис (накопл.)', 'Выполн. %', 'Сервис %']];
+  state.dealers.forEach(d => {
+    const sp = d.plan.service;
+    const sf = serviceFactAccumulated(d);
+    const exec = sf === null ? null : sp === 0 ? null : Math.round((sf / sp) * 100);
+    const pct = getServiceDiscountPctNormalized(d, q);
+    svcData.push([d.name, d.type, sp, sf, exec, pct]);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(svcData);
+  ws2['!cols'] = [{wch:22},{wch:7},{wch:18},{wch:20},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Сервис');
+
+  // Sheet 3: Monthly facts
+  const monthlyData = [['Дилер', 'Категория', ...MONTH_LABELS, 'Итого']];
+  state.dealers.forEach(d => {
+    ['equipment', 'materials', 'service'].forEach(cat => {
+      const months = d.facts[cat];
+      const total = sumYear(months) ?? 0;
+      monthlyData.push([d.name, cat === 'equipment' ? 'Оборудование' : cat === 'materials' ? 'Расход. мат.' : 'Сервис', ...months, total]);
+    });
+  });
+  const ws3 = XLSX.utils.aoa_to_sheet(monthlyData);
+  ws3['!cols'] = [{wch:22},{wch:14},...Array(12).fill({wch:10}),{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Помесячно');
+
+  XLSX.writeFile(wb, `kompo-discount-calculator-q${q}-${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('Excel-файл сохранён');
+}
+
+// ─── JSON export / import ─────────────────────────────────────────────────────
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `kompo-discount-data-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Данные сохранены в JSON');
+}
+
+function handleXLSXUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = new Uint8Array(ev.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheetName = wb.SheetNames[0];
+      const sheet = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      showToast('Загружено строк: ' + rows.length + ' (обработку нужно доделать)');
+    } catch (err) {
+      showToast('Ошибка чтения XLSX: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+}
+
+function resetData() {
+  if (!confirm('Сбросить все данные к исходным 18 дилерам?')) return;
+  state.dealers = JSON.parse(JSON.stringify(SEED_DEALERS));
+  state.scales = JSON.parse(JSON.stringify(SEED_SCALES));
+  state.quarter = 1;
+  document.getElementById('quarter-select').value = '1';
+  populateDealerSelect();
+  rerender();
+  showToast('Данные сброшены');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.getElementById('xlsx-input').addEventListener('change', handleXLSXUpload);
+
+loadState();
+document.getElementById('quarter-select').value = String(state.quarter || 1);
+populateDealerSelect();
+renderSummary();
+renderService();
+updateStorageInfo();
+</script>
+</body>
+</html>
