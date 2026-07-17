@@ -182,6 +182,59 @@ table.data th.tabular-nums { font-variant-numeric: tabular-nums; }
   background: rgba(236,253,245,0.4);
   border-right: 1px solid #a7f3d0;
 }
+
+/* ─── Dealer tab: vertical layout (months as rows) ─────────────────────── */
+table.monthly-v {
+  width: 100%; border-collapse: collapse; table-layout: fixed;
+  font-size: 12px;
+}
+table.monthly-v th, table.monthly-v td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-light);
+  text-align: right; white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+table.monthly-v th {
+  font-weight: 600; font-size: 11px;
+  padding: 8px 10px;
+  text-align: right;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+table.monthly-v th.cat {
+  text-align: left;
+  color: var(--foreground);
+}
+table.monthly-v th.th-violet  { background: #f5f3ff; color: #6d28d9; text-align: right; }
+table.monthly-v th.th-emerald { background: #ecfdf5; color: #047857; text-align: right; }
+table.monthly-v th.th-amber   { background: #fffbeb; color: #b45309; text-align: right; }
+table.monthly-v th.th-slate   { background: #f1f5f9; color: #475569; text-align: right; }
+
+table.monthly-v td.cell-label {
+  text-align: left;
+  font-weight: 500;
+  color: var(--foreground);
+}
+table.monthly-v td.cell-label.strong { font-weight: 700; }
+table.monthly-v td.cell-empty { color: #cbd5e1; text-align: right; }
+table.monthly-v td.cell-num { color: var(--foreground); text-align: right; }
+
+table.monthly-v td.bg-violet  { background: rgba(245,243,255,0.45); }
+table.monthly-v td.bg-emerald { background: rgba(236,253,245,0.45); }
+table.monthly-v td.bg-amber   { background: rgba(255,251,235,0.45); }
+table.monthly-v td.bg-slate   { background: rgba(241,245,249,0.55); }
+
+table.monthly-v td.bg-violet-strong  { background: #ede9fe; font-weight: 600; }
+table.monthly-v td.bg-emerald-strong { background: #d1fae5; font-weight: 600; }
+table.monthly-v td.bg-amber-strong   { background: #fef3c7; font-weight: 600; }
+table.monthly-v td.bg-slate-strong   { background: #e2e8f0; font-weight: 700; }
+
+table.monthly-v tr.row-month td { background: #fff; }
+table.monthly-v tr.row-month:hover td { background: rgba(241,245,249,0.5); }
+table.monthly-v tr.row-quarter td.cell-label { font-weight: 600; color: #1e293b; }
+table.monthly-v tr.row-half td.cell-label { font-weight: 700; color: #0f172a; }
+table.monthly-v tr.row-year td.cell-label { font-weight: 700; color: #0f172a; }
+table.monthly-v tr.row-year td { font-size: 13px; }
 .discount-mat {
   color: #047857; font-weight: 600;
   background: rgba(236,253,245,0.4);
@@ -415,9 +468,9 @@ table.monthly tr.year-row td { background: #e0f2fe; font-weight: 700; }
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 16.5a4 4 0 1 1 8 0a4 4 0 0 1 -8 0z"/><path d="M0 16.5a4 4 0 1 1 8 0a4 4 0 0 1 -8 0z"/><path d="M4 12.5h16l-8 -9z"/></svg>
         <span>Шкалы</span>
       </button>
-      <button class="tab" data-tab="data" onclick="switchTab('data')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
-        <span>Данные</span>
+      <button class="tab" data-tab="service" onclick="switchTab('service')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 4-6"/></svg>
+        <span>Сервис</span>
       </button>
     </div>
 
@@ -441,24 +494,6 @@ table.monthly tr.year-row td { background: #e0f2fe; font-weight: 700; }
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">
-              Скидка по Сервису — накопительно
-              <span class="info-icon" title="Скидка по сервису рассчитывается по шкале «Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев» от накопленного факта.">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              </span>
-            </div>
-            <div class="card-description">Накопительным итогом за расчётный период</div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="table-wrap">
-            <table class="data" id="service-table"></table>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div id="tab-dealer" class="tab-content hidden">
@@ -496,63 +531,47 @@ table.monthly tr.year-row td { background: #e0f2fe; font-weight: 700; }
       </div>
     </div>
 
-    <div id="tab-data" class="tab-content hidden">
+    <div id="tab-service" class="tab-content hidden">
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Загрузка данных</div>
-            <div class="card-description">Импорт отгрузок из XLSX / CSV файлов с вашего диска</div>
+            <div class="card-title">
+              Скидка по Сервису — накопительно
+              <span class="info-icon" title="Скидка по сервису рассчитывается по шкале «Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев» от накопленного факта. РФ — за квартал, Заруб — накопительно за полугодие.">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              </span>
+            </div>
+            <div class="card-description" id="service-sub">Накопительным итогом за расчётный период</div>
           </div>
         </div>
         <div class="card-body">
-          <div class="data-grid">
-            <div class="data-row">
-              <div class="data-row-info">
-                <h4>Загрузить отгрузки (XLSX)</h4>
-                <p>Выберите .xlsx файл с диска. Поддерживаются форматы:<br>
-                • Один лист на дилера (название листа = имя дилера), строки = категории, колонки = месяцы Апр…Мар<br>
-                • Одна таблица с колонками: Дилер, Категория, Апр, Май, …, Мар<br>
-                • Один лист на категорию, название листа содержит «Оборудование» / «Расход» / «Сервис»</p>
-              </div>
-              <input type="file" id="xlsx-input" accept=".xlsx,.xls" class="hidden">
-              <button class="btn btn-primary" onclick="document.getElementById('xlsx-input').click()">Выбрать XLSX</button>
-            </div>
-            <div class="data-row">
-              <div class="data-row-info">
-                <h4>Загрузить отгрузки (CSV)</h4>
-                <p>CSV с разделителем «;» или «,». Колонки: Дилер, Категория, Апр, Май, …, Мар. Категории: «Сервис», «Оборудование», «Расходные материалы».</p>
-              </div>
-              <input type="file" id="csv-input" accept=".csv,text/csv" class="hidden">
-              <button class="btn btn-primary" onclick="document.getElementById('csv-input').click()">Выбрать CSV</button>
-            </div>
-            <div class="data-row">
-              <div class="data-row-info">
-                <h4>Сохранить данные (JSON)</h4>
-                <p>Выгрузить текущее состояние (все дилеры + факты) в JSON-файл для резервной копии.</p>
-              </div>
-              <button class="btn" onclick="exportJSON()">Сохранить JSON</button>
-            </div>
-            <div class="data-row">
-              <div class="data-row-info">
-                <h4>Загрузить из JSON</h4>
-                <p>Восстановить состояние из ранее сохранённого JSON-файла.</p>
-              </div>
-              <input type="file" id="json-input" accept=".json,application/json" class="hidden">
-              <button class="btn" onclick="document.getElementById('json-input').click()">Выбрать JSON</button>
-            </div>
-            <div class="data-row">
-              <div class="data-row-info">
-                <h4>Сбросить к исходным данным</h4>
-                <p>Вернуть исходных дилеров и шкалы. Все ваши изменения будут потеряны.</p>
-              </div>
-              <button class="btn" onclick="resetData()" style="border-color: #fecaca; color: #b91c1c;">Сбросить</button>
-            </div>
-            <div class="data-row">
-              <div class="data-row-info">
-                <h4>Хранилище</h4>
-                <p id="storage-info">—</p>
-              </div>
-            </div>
+          <div class="table-wrap">
+            <table class="data" id="service-table"></table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Источник данных</div>
+            <div class="card-description">Файлы загружаются автоматически из папки <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;font-size:12px;">data_sample/</code> при открытии приложения.</div>
+          </div>
+        </div>
+        <div class="card-body" style="padding: 14px;">
+          <div id="data-source-info" style="font-size: 13px; color: #475569; line-height: 1.6;">
+            <p style="margin-bottom: 8px;"><strong>Файлы данных:</strong></p>
+            <ul style="list-style: disc; padding-left: 22px; margin-bottom: 10px;">
+              <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/dealers.xlsx</code> — планы и факты по дилерам (листы «Планы» и «Факты»)</li>
+              <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/scales.xlsx</code> — шкалы скидок (один лист на шкалу)</li>
+            </ul>
+            <p style="margin-bottom: 6px;"><strong>Как обновить данные:</strong></p>
+            <ol style="list-style: decimal; padding-left: 22px; margin-bottom: 0;">
+              <li>Откройте проект локально на ПК</li>
+              <li>Замените файлы в папке <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/</code></li>
+              <li>Откройте приложение — данные загрузятся автоматически</li>
+            </ol>
+            <p style="margin-top: 10px; font-size: 12px; color: #94a3b8;">Текущий статус: <span id="data-load-status" style="font-weight: 500;">загрузка…</span></p>
           </div>
         </div>
       </div>
@@ -573,38 +592,129 @@ const MONTH_LABELS = ["Апр", "Май", "Июн", "Июл", "Авг", "Сен"
 let state = JSON.parse(JSON.stringify(SEED_STATE));
 if (!state.quarter) state.quarter = 1;
 
-const STORAGE_KEY = 'kompo-discount-calc-v3';
-
-function saveState() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    updateStorageInfo();
-  } catch (e) { console.warn('save failed', e); }
+function setStatus(text, ok) {
+  const el = document.getElementById('data-load-status');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = ok === true ? '#047857' : ok === false ? '#b91c1c' : '#475569';
 }
 
-function loadState() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.dealers && parsed.scales) {
-        state = parsed;
-        return true;
+/**
+ * Fetch XLSX files from data_sample/ folder and parse them into app state.
+ * Falls back to embedded SEED_STATE if fetch fails (e.g. file:// protocol).
+ */
+async function loadDataFromSample() {
+  setStatus('загрузка из data_sample/…', null);
+  const base = window.location.href.replace(/\/[^\/]*$/, '/');
+  const [dealersRes, scalesRes] = await Promise.all([
+    fetch(base + 'data_sample/dealers.xlsx', { cache: 'no-store' }),
+    fetch(base + 'data_sample/scales.xlsx', { cache: 'no-store' }),
+  ]);
+  if (!dealersRes.ok || !scalesRes.ok) {
+    throw new Error('HTTP ' + dealersRes.status + '/' + scalesRes.status);
+  }
+  const dealersBuf = await dealersRes.arrayBuffer();
+  const scalesBuf = await scalesRes.arrayBuffer();
+  const parsed = parseDataSampleXLSX(dealersBuf, scalesBuf);
+  state = parsed;
+  setStatus('загружено ' + parsed.dealers.length + ' дилеров, ' + parsed.scales.length + ' шкал из data_sample/', true);
+}
+
+/**
+ * Parse dealers.xlsx (sheets "Планы", "Факты") + scales.xlsx (1 sheet per scale)
+ * into the app state shape used by SEED_STATE.
+ */
+function parseDataSampleXLSX(dealersBuf, scalesBuf) {
+  const wbD = XLSX.read(dealersBuf, { type: 'array' });
+  const plansSheet = wbD.Sheets['Планы'];
+  const factsSheet = wbD.Sheets['Факты'];
+  if (!plansSheet || !factsSheet) throw new Error('В dealers.xlsx нет листа "Планы" или "Факты"');
+
+  const plans = XLSX.utils.sheet_to_json(plansSheet, { defval: null });
+  const facts = XLSX.utils.sheet_to_json(factsSheet, { defval: null });
+
+  const toNum = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return isNaN(n) ? null : n;
+  };
+
+  const dealers = plans.map(p => {
+    const name = String(p['Дилер'] ?? '').trim();
+    const type = String(p['Тип'] ?? 'РФ').trim();
+    const planSvc = toNum(p['План Сервис']) ?? 0;
+    const planEq = toNum(p['План Оборудование']) ?? 0;
+    const planMat = toNum(p['План Расходные материалы']) ?? 0;
+    const svcPctRaw = p['Скидка Сервис %'];
+    const svcPct = svcPctRaw === null || svcPctRaw === undefined || svcPctRaw === '' ? null : toNum(svcPctRaw);
+
+    const svcRow = facts.find(f => String(f['Дилер']).trim() === name && String(f['Категория']).trim() === 'Сервис');
+    const eqRow = facts.find(f => String(f['Дилер']).trim() === name && String(f['Категория']).trim() === 'Оборудование');
+    const matRow = facts.find(f => String(f['Дилер']).trim() === name && String(f['Категория']).trim() === 'Расходные материалы');
+
+    const toMonths = (row) => MONTH_LABELS.map(m => {
+      if (!row) return null;
+      return toNum(row[m]);
+    });
+
+    const id = name
+      .toLowerCase()
+      .replace(/[^a-z0-9а-яё]+/gi, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 30) || ('d' + Math.random().toString(36).slice(2, 8));
+
+    return {
+      id,
+      name,
+      type,
+      plan: { service: planSvc, equipment: planEq, materials: planMat },
+      facts: {
+        service:   { months: toMonths(svcRow) },
+        equipment: { months: toMonths(eqRow) },
+        materials: { months: toMonths(matRow) },
+      },
+      servicePercent: svcPct,
+      scales: [],
+    };
+  });
+
+  // ─── Parse scales.xlsx (1 sheet per scale table) ──────────────────────────
+  const wbS = XLSX.read(scalesBuf, { type: 'array' });
+  const scales = wbS.SheetNames.map(sheetName => {
+    const ws = wbS.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+    // Row 0: scale title (in cell A1, possibly merged)
+    // Row 1: header (col 0 = "Компонент", cols 1+ = tier labels)
+    // Row 2+: data rows
+    const title = (rows[0] && rows[0][0]) ? String(rows[0][0]) : sheetName;
+    const headerRow = rows[1] || [];
+    const columns = [];
+    for (let i = 1; i < headerRow.length; i++) {
+      if (headerRow[i] !== null && headerRow[i] !== undefined && headerRow[i] !== '') {
+        columns.push(String(headerRow[i]));
       }
     }
-  } catch (e) { console.warn('load failed', e); }
-  return false;
-}
+    const dataRows = rows.slice(2).filter(r => r && r[0] !== null && r[0] !== undefined && r[0] !== '');
+    return {
+      title,
+      columns,
+      rows: dataRows.map(r => ({
+        component: String(r[0]),
+        values: columns.map((_, i) => (r[i + 1] === null || r[i + 1] === undefined) ? '' : String(r[i + 1])),
+        isTotal: typeof r[0] === 'string' && /итого|total/i.test(r[0]),
+      })),
+    };
+  });
 
-function updateStorageInfo() {
-  const el = document.getElementById('storage-info');
-  if (!el) return;
-  const size = new Blob([JSON.stringify(state)]).size;
-  const dealersCount = state.dealers.length;
-  const hasSaved = localStorage.getItem(STORAGE_KEY) !== null;
-  el.textContent = hasSaved
-    ? dealersCount + ' дилеров в памяти браузера (' + (size/1024).toFixed(1) + ' KB)'
-    : 'несохранённые данные';
+  // Assign scales to each dealer (scales are global reference tables)
+  dealers.forEach(d => { d.scales = scales; });
+
+  return {
+    quarter: state.quarter || 1,
+    dealers,
+    scales,
+    lastSync: null,
+  };
 }
 
 // ─── Calc helpers ─────────────────────────────────────────────────────────────
@@ -861,6 +971,7 @@ function switchTab(name) {
   document.getElementById('tab-' + name).classList.remove('hidden');
   if (name === 'scales') renderScales();
   if (name === 'dealer') renderDealerTab();
+  if (name === 'service') renderService();
 }
 
 function rerender() {
@@ -869,7 +980,6 @@ function rerender() {
   renderService();
   if (!document.getElementById('tab-scales').classList.contains('hidden')) renderScales();
   if (!document.getElementById('tab-dealer').classList.contains('hidden')) renderDealerTab();
-  saveState();
 }
 
 function renderSummary() {
@@ -972,6 +1082,10 @@ function toggleSummarySort(k) {
 
 function renderService() {
   const q = state.quarter;
+  const subEl = document.getElementById('service-sub');
+  if (subEl) {
+    subEl.textContent = 'РФ: за ' + q + ' кв. (' + quarterMonthRange(q) + ') • Заруб: за ' + (q <= 2 ? 1 : 2) + ' п/г (' + halfYearMonthRange(q) + ') • накопительно';
+  }
   const rows = state.dealers.map(d => {
     const sp = d.plan.service;
     const sf = serviceFactAccumulated(d);
@@ -1131,66 +1245,97 @@ function renderScales() {
 function renderDealerTab() {
   const dealerId = document.getElementById('dealer-select').value;
   const d = state.dealers.find(d => d.id === dealerId) ?? state.dealers[0];
+  if (!d) return;
   document.getElementById('dealer-tab-title').textContent = d.name + ' — помесячные отгрузки';
 
   const q = state.quarter;
   const planTotal = d.plan.equipment + d.plan.materials + d.plan.service;
-  const factEq = sumYear(d.facts.equipment.months || d.facts.equipment) ?? 0;
-  const factMat = sumYear(d.facts.materials.months || d.facts.materials) ?? 0;
-  const factSvc = sumYear(d.facts.service.months || d.facts.service) ?? 0;
-  const factTotal = factEq + factMat + factSvc;
-  const isZarub = d.type === 'Заруб';
-  const qf = isZarub ? halfYearFactsByCategory(d, q) : quarterlyFactsByCategory(d, q);
-
-  const eqPct = calcEquipmentDiscountPct(d, q);
-  const matSplit = calcMaterialsDiscountPctSplit(d, q);
-  const svcPct = getServiceDiscountPctNormalized(d, q);
-
   const eqMonths = d.facts.equipment.months || d.facts.equipment;
   const matMonths = d.facts.materials.months || d.facts.materials;
   const svcMonths = d.facts.service.months || d.facts.service;
 
-  const buildRow = (label, months, colorClass, isQuarter=false) => {
-    const total = sumYear(months) ?? 0;
-    const cells = months.map(v => v === null ? '<td class="empty">—</td>' : '<td>' + fmt(v, '') + '</td>').join('');
-    return '<tr' + (isQuarter ? ' class="q-row"' : '') + '><td class="cat" style="color:' + colorClass + '">' + label + '</td>' + cells + '<td class="total">' + fmt(total, '') + '</td></tr>';
+  // Build row specs: 12 months + Q1, Q2, Q3, Q4 + 1п/г + 2п/г + Год
+  const rowSpecs = [
+    ...MONTH_LABELS.map((m, i) => ({ label: m, type: 'month', indices: [i] })),
+    { label: 'Q1 (апр–июн)', type: 'quarter', indices: [0, 1, 2], strong: true },
+    { label: 'Q2 (июл–сен)', type: 'quarter', indices: [3, 4, 5], strong: true },
+    { label: 'Q3 (окт–дек)', type: 'quarter', indices: [6, 7, 8], strong: true },
+    { label: 'Q4 (янв–мар)', type: 'quarter', indices: [9, 10, 11], strong: true },
+    { label: '1 п/г', type: 'half', indices: [0, 1, 2, 3, 4, 5], strong: true },
+    { label: '2 п/г', type: 'half', indices: [6, 7, 8, 9, 10, 11], strong: true },
+    { label: 'Год', type: 'year', indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], strong: true },
+  ];
+
+  const sumIdx = (months, idx) => {
+    if (!idx) return null;
+    const slice = idx.map(i => months[i]);
+    if (!slice.some(v => v !== null)) return null;
+    return slice.reduce((a, b) => a + (b ?? 0), 0);
   };
 
-  const planRow = (label) => {
-    const cells = MONTH_LABELS.map(() => '<td class="empty">—</td>').join('');
-    return '<tr class="q-row"><td class="cat">' + label + '</td>' + cells + '<td class="total">' + fmt(planTotal, '') + '</td></tr>';
-  };
+  const factSvc = sumYear(svcMonths) ?? 0;
+  const factEq = sumYear(eqMonths) ?? 0;
+  const factMat = sumYear(matMonths) ?? 0;
+  const factTotal = factSvc + factEq + factMat;
+  const eqPct = calcEquipmentDiscountPct(d, q);
+  const matSplit = calcMaterialsDiscountPctSplit(d, q);
+  const svcPct = getServiceDiscountPctNormalized(d, q);
+
+  const rowsHtml = rowSpecs.map(spec => {
+    const svc = sumIdx(svcMonths, spec.indices);
+    const eq = sumIdx(eqMonths, spec.indices);
+    const mat = sumIdx(matMonths, spec.indices);
+    const total = (svc === null && eq === null && mat === null) ? null : (svc ?? 0) + (eq ?? 0) + (mat ?? 0);
+    const isStrong = spec.strong;
+    const rowCls = spec.type === 'year' ? 'row-year'
+      : spec.type === 'half' ? 'row-half'
+      : spec.type === 'quarter' ? 'row-quarter'
+      : 'row-month';
+    const fmtCell = (v, bg) => {
+      if (v === null) return '<td class="cell-empty' + (bg ? ' ' + bg : '') + '">—</td>';
+      return '<td class="cell-num' + (bg ? ' ' + bg : '') + '">' + fmt(v, '') + '</td>';
+    };
+    return '<tr class="' + rowCls + '">' +
+      '<td class="cell-label' + (isStrong ? ' strong' : '') + '">' + spec.label + '</td>' +
+      fmtCell(svc, isStrong ? 'bg-violet-strong' : 'bg-violet') +
+      fmtCell(eq, isStrong ? 'bg-emerald-strong' : 'bg-emerald') +
+      fmtCell(mat, isStrong ? 'bg-amber-strong' : 'bg-amber') +
+      fmtCell(total, isStrong ? 'bg-slate-strong' : 'bg-slate') +
+      '</tr>';
+  }).join('');
 
   const body = document.getElementById('dealer-body');
   body.innerHTML = `
     <div class="dealer-info">
       <span class="name">${d.name}</span>
-      <span class="kpi">План: ${fmt(planTotal, ' €')}</span>
-      <span class="kpi">Выручка (факт): ${fmt(factTotal, ' €')}</span>
-      <span class="kpi">Тип: ${d.type}</span>
-      <span class="kpi">Скидка Оборуд.: ${fmtPct(eqPct)}</span>
-      <span class="kpi">Скидка РМ (объём): ${fmtPct(matSplit.volume)}</span>
-      <span class="kpi">Скидка Сервис: ${fmtPct(svcPct)}</span>
+      <span class="kpi">Тип: <strong>${d.type}</strong></span>
+      <span class="kpi">План (год): ${fmt(planTotal, ' €')}</span>
+      <span class="kpi">Факт (год): ${fmt(factTotal, ' €')}</span>
+      <span class="kpi">Скидка Оборуд.: <strong style="color:#059669">${fmtPct(eqPct)}</strong></span>
+      <span class="kpi">Скидка РМ: <strong style="color:#d97706">${fmtPct(matSplit.volume)}</strong></span>
+      <span class="kpi">Скидка Сервис: <strong style="color:#7c3aed">${fmtPct(svcPct)}</strong></span>
     </div>
 
-    <table class="monthly">
+    <table class="monthly-v">
+      <colgroup>
+        <col style="width:22%"><col style="width:19%"><col style="width:21%"><col style="width:24%"><col style="width:14%">
+      </colgroup>
       <thead>
         <tr>
           <th class="cat">Период</th>
-          ${MONTH_LABELS.map(m => '<th>' + m + '</th>').join('')}
-          <th class="total">Итог</th>
+          <th class="th-violet">Сервис, €</th>
+          <th class="th-emerald">Оборудование, €</th>
+          <th class="th-amber">Расходные материалы, €</th>
+          <th class="th-slate">Итого, €</th>
         </tr>
       </thead>
       <tbody>
-        ${buildRow('Сервис, €', svcMonths, '#7c3aed')}
-        ${buildRow('Оборудование, €', eqMonths, '#059669')}
-        ${buildRow('Расходные материалы, €', matMonths, '#d97706')}
-        ${planRow('План (год)')}
+        ${rowsHtml}
       </tbody>
     </table>
 
     <div style="margin-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;">
-      Документ сформирован статической версией приложения • КОМПО • ${new Date().toLocaleDateString('ru-RU')}
+      Финансовый год: апрель → март • КОМПО • ${new Date().toLocaleDateString('ru-RU')}
     </div>
   `;
 }
@@ -1323,275 +1468,49 @@ function exportExcel() {
   showToast('Excel-файл сохранён', 'success');
 }
 
-function exportJSON() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'kompo-discount-data-' + new Date().toISOString().slice(0,10) + '.json';
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('Данные сохранены в JSON', 'success');
-}
+// ─── Excel export (kept; uses SheetJS) ────────────────────────────────────
+function exportExcel() {
+  const q = state.quarter;
+  const wb = XLSX.utils.book_new();
 
-function handleJSONUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    try {
-      const parsed = JSON.parse(ev.target.result);
-      if (!parsed.dealers || !parsed.scales) throw new Error('Неверный формат JSON');
-      state = parsed;
-      saveState();
-      populateDealerSelects();
-      rerender();
-      showToast('Данные восстановлены из JSON', 'success');
-    } catch (err) {
-      showToast('Ошибка JSON: ' + err.message, 'error');
-    }
-  };
-  reader.readAsText(file);
-  e.target.value = '';
-}
+  // Sheet 1: Сводная
+  const summaryRows = [['Дилер', 'Тип', 'План, €', 'Факт, €', 'Вып, %', 'Скидка Оборуд., %', 'Скидка РМ объём, %', 'Скидка Сервис, %']];
+  state.dealers.forEach(d => {
+    const plan = effectivePlanTotal(d, q) ?? 0;
+    const facts = effectiveFactsByCategory(d, q);
+    const factSum = (facts.service ?? 0) + (facts.equipment ?? 0) + (facts.materials ?? 0);
+    const exec = plan > 0 ? Math.round((factSum / plan) * 100) : 0;
+    const eqPct = calcEquipmentDiscountPct(d, q);
+    const matSplit = calcMaterialsDiscountPctSplit(d, q);
+    const svcPct = getServiceDiscountPctNormalized(d, q);
+    summaryRows.push([d.name, d.type, plan, factSum, exec + '%', eqPct + '%', matSplit.volume + '%', svcPct + '%']);
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(wb, ws1, 'Сводная');
 
-// ─── XLSX parser ─────────────────────────────────────────────────────────────
-function parseXLSX(file) {
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    try {
-      const data = new Uint8Array(ev.target.result);
-      const wb = XLSX.read(data, { type: 'array' });
-      const result = { dealers: {}, errors: [] };
+  // Sheet 2: Сервис (накопительно)
+  const svcRows = [['Дилер', 'Тип', 'План Сервис, €', 'Факт Сервис (накопл.), €', 'Выполн., %', 'Скидка Сервис, %']];
+  state.dealers.forEach(d => {
+    const sp = d.plan.service;
+    const sf = serviceFactAccumulated(d);
+    const exec = sf === null ? null : sp === 0 ? null : Math.round((sf / sp) * 100);
+    const pct = getServiceDiscountPctNormalized(d, q);
+    svcRows.push([d.name, d.type, sp, sf ?? 'нет', exec === null ? '—' : exec + '%', pct + '%']);
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(svcRows);
+  XLSX.utils.book_append_sheet(wb, ws2, 'Сервис');
 
-      const MONTH_COLS = ['Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек', 'Янв', 'Фев', 'Мар'];
-      const CAT_KEYWORDS = {
-        equipment: ['оборуд', 'equip', 'мп'],
-        materials: ['расход', 'материал', 'rm', 'рм'],
-        service:   ['сервис', 'зч', 'service'],
-      };
+  // Sheet 3: Факты по дилерам
+  const factRows = [['Дилер', 'Категория', ...MONTH_LABELS]];
+  state.dealers.forEach(d => {
+    [['Сервис', d.facts.service.months], ['Оборудование', d.facts.equipment.months], ['Расходные материалы', d.facts.materials.months]].forEach(([label, months]) => {
+      factRows.push([d.name, label, ...months.map(m => m === null ? '' : m)]);
+    });
+  });
+  const ws3 = XLSX.utils.aoa_to_sheet(factRows);
+  XLSX.utils.book_append_sheet(wb, ws3, 'Факты');
 
-      function classifyCategory(text) {
-        const lc = (text || '').toLowerCase();
-        for (const [cat, keys] of Object.entries(CAT_KEYWORDS)) {
-          if (keys.some(k => lc.includes(k))) return cat;
-        }
-        return null;
-      }
-
-      function findMonthCol(headers) {
-        const idx = [];
-        for (const m of MONTH_COLS) {
-          const i = headers.findIndex(h => String(h || '').trim().toLowerCase().startsWith(m.toLowerCase().slice(0,3)));
-          idx.push(i);
-        }
-        if (idx.every(i => i === -1)) return null;
-        return idx;
-      }
-
-      function parseRow(row, idx) {
-        return idx.map(i => {
-          if (i < 0 || i >= row.length) return null;
-          const v = row[i];
-          if (v === null || v === undefined || v === '') return null;
-          const n = Number(v);
-          return Number.isFinite(n) ? n : null;
-        });
-      }
-
-      function matchDealer(name) {
-        if (!name) return null;
-        const lc = name.toLowerCase().trim();
-        return state.dealers.find(d => {
-          const dlc = d.name.toLowerCase();
-          return dlc === lc || dlc.includes(lc) || lc.includes(dlc.split(',')[0].trim()) || dlc.split(',')[0].trim().includes(lc);
-        });
-      }
-
-      wb.SheetNames.forEach(sheetName => {
-        const sheet = wb.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-        if (rows.length === 0) return;
-
-        const headers = rows[0].map(h => String(h || '').trim());
-        const monthIdx = findMonthCol(headers);
-        if (!monthIdx) {
-          result.errors.push('Лист «' + sheetName + '»: не найдены колонки месяцев (Апр…Мар)');
-          return;
-        }
-
-        let dealerCol = headers.findIndex(h => /дилер|наименование|название|name/i.test(String(h||'')));
-        let catCol = headers.findIndex(h => /категор|category|тип|вид/i.test(String(h||'')));
-
-        const sheetCategory = classifyCategory(sheetName);
-        const sheetDealer = matchDealer(sheetName);
-
-        rows.slice(1).forEach((row, ri) => {
-          if (!row || row.every(c => c === null || c === '')) return;
-
-          let dealerName = dealerCol >= 0 ? String(row[dealerCol] || '').trim() : (sheetDealer ? sheetDealer.name : sheetName);
-          let categoryName = catCol >= 0 ? String(row[catCol] || '').trim() : (sheetCategory || classifyCategory(sheetName) || classifyCategory(row[0] ? String(row[0]) : ''));
-
-          if (!dealerName && row[0] && typeof row[0] === 'string') dealerName = String(row[0]).trim();
-          if (!dealerName) return;
-
-          const dealer = matchDealer(dealerName);
-          if (!dealer) {
-            result.errors.push('Лист «' + sheetName + '» строка ' + (ri+2) + ': дилер «' + dealerName + '» не найден');
-            return;
-          }
-
-          const cat = classifyCategory(categoryName) || sheetCategory;
-          if (!cat) {
-            result.errors.push('Лист «' + sheetName + '» строка ' + (ri+2) + ': категория «' + categoryName + '» не распознана');
-            return;
-          }
-
-          const values = parseRow(row, monthIdx);
-          if (!result.dealers[dealer.id]) result.dealers[dealer.id] = {};
-          result.dealers[dealer.id][cat] = values;
-        });
-      });
-
-      let updated = 0;
-      Object.entries(result.dealers).forEach(([dealerId, facts]) => {
-        const dealer = state.dealers.find(d => d.id === dealerId);
-        if (!dealer) return;
-        if (facts.equipment) { dealer.facts.equipment = facts.equipment; updated++; }
-        if (facts.materials) { dealer.facts.materials = facts.materials; updated++; }
-        if (facts.service)   { dealer.facts.service = facts.service; updated++; }
-      });
-
-      saveState();
-      populateDealerSelects();
-      rerender();
-
-      const dealerCount = Object.keys(result.dealers).length;
-      let msg = 'Загружено: ' + dealerCount + ' дилер(ов), ' + updated + ' категорий обновлено';
-      if (result.errors.length > 0) {
-        msg += '. Предупреждений: ' + result.errors.length;
-        console.warn('XLSX import warnings:', result.errors);
-      }
-      showToast(msg, 'success');
-    } catch (err) {
-      console.error('XLSX parse failed:', err);
-      showToast('Ошибка чтения XLSX: ' + err.message, 'error');
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-function handleXLSXUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  parseXLSX(file);
-  e.target.value = '';
-}
-
-function handleCSVUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    try {
-      const text = ev.target.result;
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) { showToast('CSV пуст или нет данных', 'error'); return; }
-
-      const first = lines[0];
-      const delim = first.includes(';') ? ';' : first.includes('\t') ? '\t' : ',';
-      const headers = first.split(delim).map(h => h.trim().replace(/^"|"$/g, ''));
-      const MONTH_COLS = ['Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек', 'Янв', 'Фев', 'Мар'];
-      const monthIdx = MONTH_COLS.map(m =>
-        headers.findIndex(h => h.toLowerCase().startsWith(m.toLowerCase().slice(0,3)))
-      );
-      if (monthIdx.every(i => i === -1)) { showToast('CSV: не найдены колонки месяцев', 'error'); return; }
-
-      let dealerCol = headers.findIndex(h => /дилер|наименование|name/i.test(h));
-      let catCol = headers.findIndex(h => /категор|category|тип/i.test(h));
-      if (dealerCol < 0) dealerCol = 0;
-      if (catCol < 0) catCol = 1;
-
-      const CAT_KEYWORDS = {
-        equipment: ['оборуд', 'equip', 'мп'],
-        materials: ['расход', 'материал', 'рм', 'rm'],
-        service:   ['сервис', 'зч', 'service'],
-      };
-      const classifyCat = (text) => {
-        const lc = (text || '').toLowerCase();
-        for (const [cat, keys] of Object.entries(CAT_KEYWORDS)) {
-          if (keys.some(k => lc.includes(k))) return cat;
-        }
-        return null;
-      };
-      const matchDealer = (name) => {
-        if (!name) return null;
-        const lc = name.toLowerCase().trim();
-        return state.dealers.find(d => {
-          const dlc = d.name.toLowerCase();
-          return dlc === lc || dlc.includes(lc) || lc.includes(dlc.split(',')[0].trim()) || dlc.split(',')[0].trim().includes(lc);
-        });
-      };
-
-      let updated = 0;
-      const usedDealers = new Set();
-      const errors = [];
-
-      lines.slice(1).forEach((line, li) => {
-        const cols = line.split(delim).map(c => c.trim().replace(/^"|"$/g, ''));
-        if (cols.every(c => !c)) return;
-        const dealerName = cols[dealerCol];
-        const categoryName = cols[catCol];
-        if (!dealerName) return;
-
-        const dealer = matchDealer(dealerName);
-        if (!dealer) {
-          errors.push('Строка ' + (li+2) + ': дилер «' + dealerName + '» не найден');
-          return;
-        }
-        const cat = classifyCat(categoryName);
-        if (!cat) {
-          errors.push('Строка ' + (li+2) + ': категория «' + categoryName + '» не распознана');
-          return;
-        }
-
-        const values = monthIdx.map(i => {
-          if (i < 0 || i >= cols.length) return null;
-          const v = cols[i].replace(/\s/g, '').replace(',', '.');
-          if (v === '' || v === '-') return null;
-          const n = Number(v);
-          return Number.isFinite(n) ? n : null;
-        });
-
-        dealer.facts[cat] = values;
-        updated++;
-        usedDealers.add(dealer.id);
-      });
-
-      saveState();
-      populateDealerSelects();
-      rerender();
-      let msg = 'CSV загружен: ' + usedDealers.size + ' дилер(ов), ' + updated + ' категорий обновлено';
-      if (errors.length) msg += '. Предупреждений: ' + errors.length;
-      showToast(msg, 'success');
-      if (errors.length) console.warn('CSV import warnings:', errors);
-    } catch (err) {
-      console.error('CSV parse failed:', err);
-      showToast('Ошибка CSV: ' + err.message, 'error');
-    }
-  };
-  reader.readAsText(file);
-  e.target.value = '';
-}
-
-function resetData() {
-  if (!confirm('Сбросить все данные к исходным?')) return;
-  state = JSON.parse(JSON.stringify(SEED_STATE));
-  state.quarter = 1;
-  document.getElementById('quarter-select').value = '1';
-  populateDealerSelects();
-  rerender();
-  showToast('Данные сброшены', 'success');
+  XLSX.writeFile(wb, 'discounts_q' + q + '_' + new Date().toISOString().slice(0, 10) + '.xlsx');
 }
 
 function showToast(msg, kind = '') {
@@ -1602,16 +1521,21 @@ function showToast(msg, kind = '') {
 }
 
 document.getElementById('quarter-select').addEventListener('change', rerender);
-document.getElementById('xlsx-input').addEventListener('change', handleXLSXUpload);
-document.getElementById('csv-input').addEventListener('change', handleCSVUpload);
-document.getElementById('json-input').addEventListener('change', handleJSONUpload);
 
-loadState();
-document.getElementById('quarter-select').value = String(state.quarter || 1);
-populateDealerSelects();
-renderSummary();
-renderService();
-updateStorageInfo();
+// ─── Initial load: fetch data from data_sample/ folder ──────────────────────
+(async () => {
+  try {
+    await loadDataFromSample();
+  } catch (e) {
+    console.warn('data_sample/ fetch failed, falling back to embedded SEED_STATE:', e);
+    setStatus('используются встроенные данные (data_sample/ недоступен)', false);
+  }
+  document.getElementById('quarter-select').value = String(state.quarter || 1);
+  populateDealerSelects();
+  renderSummary();
+  renderService();
+})();
+
 </script>
 </body>
 </html>
