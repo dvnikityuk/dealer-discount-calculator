@@ -537,7 +537,7 @@ table.monthly tr.year-row td { background: #e0f2fe; font-weight: 700; }
           <div>
             <div class="card-title">
               Скидка по Сервису — накопительно
-              <span class="info-icon" title="Скидка по сервису рассчитывается по шкале «Сервис (ЗЧ) — абсолютные отгрузки за 12 месяцев» от накопленного факта. РФ — за квартал, Заруб — накопительно за полугодие.">
+              <span class="info-icon" title="Скидка по сервису рассчитывается по факту Сервиса/ЗЧ и шкале «Сервис (ЗЧ)». Для РФ используется накопленный факт финансового года. Для зарубежных дилеров период зависит от шкалы: 6 месяцев — выбранное полугодие накопительно; 12 месяцев — весь финансовый год. Q1/Q3 — промежуточное значение.">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
               </span>
             </div>
@@ -1156,14 +1156,22 @@ function parsePct(v) {
 }
 
 function findTierColumn(columns, volume) {
+  if (columns.length === 0 || !Number.isFinite(volume)) return -1;
+
   for (let i = 0; i < columns.length; i++) {
     const t = parseTier(columns[i]);
     const min = t.min ?? -Infinity;
     const max = t.max ?? Infinity;
     if (volume >= min && volume <= max) return i;
+
+    // Some XLSX scales use integer bounds (for example, 0–7000 and
+    // 7001–19000), while actual shipment totals can contain cents. If a value
+    // falls in the fractional gap, keep the previous tier instead of
+    // incorrectly assigning the highest discount.
+    if (volume < min) return Math.max(0, i - 1);
   }
-  if (columns.length === 0) return -1;
-  if (volume <= 0) return 0;
+
+  // Values above the last bounded tier belong to the final tier.
   return columns.length - 1;
 }
 
@@ -1247,27 +1255,18 @@ function calcMaterialsDiscountPctSplit(dealer, quarter) {
 
 function calcServiceDiscountPct(dealer, quarter) {
   const scales = getDealerScales(dealer);
-  if (dealer.type === 'РФ') {
-    const eqTable = findScaleTable(scales, 'Оборудование');
-    if (!eqTable) return null;
-    const facts = quarterlyFactsByCategory(dealer, quarter);
-    const hasAny = facts.service !== null || facts.equipment !== null || facts.materials !== null;
-    if (!hasAny) return null;
-    const q1Total = (facts.service ?? 0) + (facts.equipment ?? 0) + (facts.materials ?? 0);
-    if (q1Total === 0) return null;
-    const volume = q1Total / 2500;
-    const colIdx = findTierColumn(eqTable.columns, volume);
-    if (colIdx < 0) return null;
-    const totalRowIdx = findTotalRow(eqTable);
-    if (totalRowIdx >= 0) {
-      return parsePct(eqTable.rows[totalRowIdx].values[colIdx]);
-    }
-    return null;
-  }
   const table = findScaleTable(scales, 'Сервис');
   if (!table) return null;
-  const fact = serviceFactAccumulated(dealer);
+
+  // Service is calculated from service/spare-parts facts and its own scale,
+  // not from the equipment discount table. Six-month scales use the selected
+  // half-year (Q1/Q3 are interim); otherwise use the financial-year total.
+  const sixMonthScale = /6\s*месяц/i.test(table.title);
+  const fact = sixMonthScale
+    ? halfYearFactsByCategory(dealer, quarter).service
+    : serviceFactAccumulated(dealer);
   if (fact === null || fact === 0) return null;
+
   const colIdx = findTierColumn(table.columns, fact);
   if (colIdx < 0) return null;
   const row = table.rows[0];
@@ -1441,7 +1440,7 @@ function renderService() {
   const q = state.quarter;
   const subEl = document.getElementById('service-sub');
   if (subEl) {
-    subEl.textContent = 'РФ: за ' + q + ' кв. (' + quarterMonthRange(q) + ') • Заруб: за ' + (q <= 2 ? 1 : 2) + ' п/г (' + halfYearMonthRange(q) + ') • накопительно';
+    subEl.textContent = 'РФ: факт Сервиса за ф.г. • Заруб: шкала 6 мес. — ' + (q <= 2 ? 1 : 2) + ' п/г до ' + q + ' кв.; шкала 12 мес. — весь ф.г.';
   }
   const rows = state.dealers.map(d => {
     const sp = d.plan.service;
