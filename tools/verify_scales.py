@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Независимый аудит единого листа шкал: «ничего не потерялось?».
+Независимый аудит файла шкал: «ничего не потерялось?»
 
 Сравнивает собранный docs/data_sample/scales.xlsx с исходным многовкладочным
 docs/data_sample/legacy/scales_multisheet_2026.xlsx ЯЧЕЙКА ЗА ЯЧЕЙКОЙ:
 
   1. резервная копия побайтово равна оригиналу из git-истории;
-  2. в новом файле ровно два листа: «Шкалы» (данные) и «Реестр» (справочник);
-  3. на листе «Шкалы» 18 блоков-маркеров «### ДИЛЕР», порядок и имена совпадают
+  2. в новом файле ровно три листа: «Шкалы» (плоская таблица), «Витрина»
+     (кросс-таблица на формулах) и «Блоки» (копия исходных вкладок);
+  3. на листе «Блоки» 18 блоков-маркеров «### ДИЛЕР», порядок и имена совпадают
      с порядком вкладок исходника, скрытые вкладки помечены;
   4. для каждого блока: все значения, формулы (пересчитанные на новые строки),
      кэш-значения формул, форматы чисел, шрифты, заливки, границы, выравнивание,
      объединённые ячейки и высота строк перенесены 1:1, лишних ячеек нет;
   5. служебные «Лист1/Лист2/Лист3» в новый файл не переносились (по решению
      заказчика) и остались в резервной копии;
-  6. лист «Реестр»: каждый адрес ячейки из колонки «Ячейка в «Шкалы»» существует
-     и содержит ровно то значение, что записано в реестре.
+  6. плоская таблица: заголовки колонок, отсутствие объединённых ячеек и пустых
+     строк (иначе сводная не строится), уникальность ключей, а главное — каждая
+     запись ссылается на реальную ячейку исходника и значение в ней совпадает;
+  7. витрина: все формулы смотрят в плоскую таблицу, а их кэш-значения равны
+     тому, что должно получиться (INDEX/MATCH пересчитываются здесь же).
+
+Логику разбора файла калькулятором проверяют JS-тесты (tests/*.test.mjs): они
+сравнивают состояние приложения из плоской таблицы с состоянием из 18 вкладок.
 
 Запуск:
     pip install openpyxl
@@ -48,18 +55,28 @@ LEGACY = ROOT / 'docs' / 'data_sample' / 'legacy' / 'scales_multisheet_2026.xlsx
 GIT_PATH_ORIGINAL = 'docs/data_sample/scales.xlsx'      # как файл лежал до сборки
 GIT_PATH_BACKUP = 'docs/data_sample/legacy/scales_multisheet_2026.xlsx'
 
-SCALES_SHEET = 'Шкалы'
-REGISTRY_SHEET = 'Реестр'
+FLAT_SHEET = 'Шкалы'
+SHOWCASE_SHEET = 'Витрина'
+BLOCKS_SHEET = 'Блоки'
+
+# Заголовки плоской таблицы — контракт между сборщиком, калькулятором и audit'ом.
+FLAT_HEADER = [
+    'Дилер', 'Тип', 'Раздел', 'Категория', 'Таблица', 'Показатель',
+    '№ строки', 'Итог', 'Тир', '№ тира', 'Тир от', 'Тир до',
+    'Значение', 'Единица', 'Вкладка (была)', 'Ячейка в исходнике',
+]
+FLAT_KEYS_HEADER = ['Ключ: строка', 'Ключ: тир', 'Ключ: значение',
+                    'Ключ: порядок строки', 'Ключ: итог', 'Ключ: колонка плана']
 LEGACY_SHEET_RE = re.compile(r'^\s*лист\s*\d*\s*$', re.I)
 DEALER_MARKER_RE = re.compile(r'^\s*#{2,}\s*ДИЛЕР', re.I)
-SKIP_MARKER_RE = re.compile(r'^\s*#{2,}\s*(РЕЕСТР|АРХИВ|СЛУЖЕБ)', re.I)
+SKIP_MARKER_RE = re.compile(r'^\s*#{2,}\s*(РЕЕСТР|ВИТРИНА|ПЛОСКАЯ|СВОД|АРХИВ|СЛУЖЕБ)', re.I)
 VYRUCHKA_RE = re.compile(r'Выручка\s*202[3-6]', re.I)
 SISTEMA_RE = re.compile(r'СИСТЕМА\s+РАСЧЕТА\s+СКИДКИ\s+ПО\s+ЗАПЧАСТЯМ', re.I)
 
 problems: list[str] = []
 notes: list[str] = []
 checked = {'cells': 0, 'styles': 0, 'formulas': 0, 'cached': 0, 'merges': 0,
-           'heights': 0, 'registry': 0}
+           'heights': 0, 'flat': 0, 'flat_keys': 0, 'showcase': 0}
 
 
 def fail(msg: str):
@@ -280,85 +297,301 @@ def block_contains(row, row_shift, src_max_row):
 
 
 # ─── 6. Реестр ───────────────────────────────────────────────────────────────
-def check_registry(reg_ws, tgt_ws, tgt_val_ws):
-    header = [c.value for c in reg_ws[2]]
-    try:
-        col_target = header.index('Ячейка в «Шкалы»') + 1
-        col_value = header.index('Значение') + 1
-        col_dealer = header.index('Дилер') + 1
-    except ValueError:
-        fail('в листе «Реестр» нет ожидаемых колонок (Ячейка в «Шкалы», Значение, Дилер)')
-        return
-    per_dealer = {}
-    for r in range(3, reg_ws.max_row + 1):
-        target = reg_ws.cell(r, col_target).value
-        value = reg_ws.cell(r, col_value).value
-        dealer = reg_ws.cell(r, col_dealer).value
-        if dealer:
-            per_dealer[dealer] = per_dealer.get(dealer, 0) + 1
-        if not isinstance(target, str) or not re.fullmatch(r'[A-Z]{1,3}\d+', target):
+def flat_columns(ws):
+    """Колонки плоской таблицы по заголовкам + проверка самих заголовков."""
+    header = [c.value for c in ws[1]]
+    if header[:len(FLAT_HEADER)] != FLAT_HEADER:
+        fail(f'заголовки листа «{FLAT_SHEET}» не совпадают с ожидаемыми: {header[:len(FLAT_HEADER)]}')
+    keys = header[len(FLAT_HEADER):len(FLAT_HEADER) + len(FLAT_KEYS_HEADER)]
+    if keys != FLAT_KEYS_HEADER:
+        fail(f'служебные ключи листа «{FLAT_SHEET}» не совпадают: {keys}')
+    return {name: i + 1 for i, name in enumerate(header) if name}
+
+
+def check_flat(flat_ws, flat_val_ws, src_wb, src_val):
+    """
+    Плоская таблица (лист «Шкалы») — источник данных для калькулятора:
+      • заголовки колонок — как договорились (по ним колонки ищет калькулятор);
+      • нет объединённых ячеек и пустых строк: иначе сводная таблица не строится;
+      • ключ значения уникален — по нему витрина ищет число через INDEX/MATCH;
+      • каждая запись ссылается на реальную ячейку исходника, и значение в той
+        ячейке совпадает с записанным (скидка нормализована в долю: 0.14 = 14%);
+      • служебные ключи — формулы, и их кэш-значения совпадают с содержимым строки.
+    """
+    col = flat_columns(flat_ws)
+    if len(col) != len(FLAT_HEADER) + len(FLAT_KEYS_HEADER):
+        fail(f'в плоской таблице {len(col)} колонок, ожидалось '
+             f'{len(FLAT_HEADER) + len(FLAT_KEYS_HEADER)}')
+
+    if len(flat_ws.merged_cells.ranges):
+        fail(f'в плоской таблице {len(flat_ws.merged_cells.ranges)} объединённых ячеек — '
+             f'сводная таблица из такого листа не строится')
+    if flat_ws.freeze_panes != 'B2':
+        note(f'закрепление панелей листа «{FLAT_SHEET}»: {flat_ws.freeze_panes}')
+    if not flat_ws.auto_filter.ref:
+        fail('в плоской таблице нет автофильтра')
+
+    dealers, keys, categories = {}, set(), set()
+    n_scale = n_plan = 0
+    last_row = flat_ws.max_row
+    for r in range(2, last_row + 1):
+        row = {name: flat_ws.cell(r, c).value for name, c in col.items()}
+        if all(v is None or v == '' for v in row.values()):
+            fail(f'«{FLAT_SHEET}»: пустая строка {r} внутри таблицы')
             continue
-        checked['registry'] += 1
-        cell = tgt_ws[target]
-        raw = cell.value
-        actual = tgt_val_ws[target].value if isinstance(raw, str) and raw.startswith('=') else raw
-        if not value_equal(value, actual):
-            fail(f'Реестр!A{r}: значение {value!r} не совпадает с «Шкалы»!{target} = {actual!r}')
-    if len(per_dealer) < 18:
-        fail(f'в реестре только {len(per_dealer)} дилеров (ожидалось 18)')
-    note(f'реестр: {sum(per_dealer.values())} записей по {len(per_dealer)} дилерам, '
-         f'сверено адресов: {checked["registry"]}')
+        dealer = row['Дилер']
+        section = row['Раздел']
+        category = row['Категория']
+        indicator = row['Показатель']
+        value = row['Значение']
+        where = f'{dealer} / {section} / {category} / {indicator} / {row["Тир"]}'
+        if not dealer or not section or not category or not indicator:
+            fail(f'«{FLAT_SHEET}»!A{r}: у записи пустые обязательные колонки ({where})')
+            continue
+        dealers[dealer] = dealers.get(dealer, 0) + 1
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            fail(f'«{FLAT_SHEET}»!M{r}: значение {value!r} не число ({where})')
+            continue
+
+        key = (dealer, section, category, row['№ строки'], row['№ тира'])
+        if key in keys:
+            fail(f'«{FLAT_SHEET}»: повтор ключа значения {"|".join(map(str, key))}')
+        keys.add(key)
+
+        # ── сверка с исходной ячейкой (главная проверка «ничего не потерялось») ──
+        src_sheet, src_cell = row['Вкладка (была)'], row['Ячейка в исходнике']
+        if section == 'Шкала':
+            n_scale += 1
+            categories.add(category)
+            if not src_sheet or not src_cell:
+                fail(f'«{FLAT_SHEET}»!A{r}: у значения шкалы нет ссылки на исходник ({where})')
+            elif src_sheet not in src_wb.sheetnames:
+                fail(f'«{FLAT_SHEET}»!A{r}: в исходнике нет вкладки «{src_sheet}»')
+            else:
+                raw = src_val[src_sheet][src_cell].value
+                fmt = src_wb[src_sheet][src_cell].number_format
+                expected = raw if '%' in (fmt or '') else (
+                    raw / 100.0 if isinstance(raw, (int, float)) else None)
+                checked['flat'] += 1
+                if expected is None:
+                    fail(f'«{FLAT_SHEET}»!M{r}: в исходнике {src_sheet}!{src_cell} пусто '
+                         f'или не число ({raw!r}), а в таблице {value!r}')
+                elif abs(expected - value) > 1e-9:
+                    fail(f'«{FLAT_SHEET}»!M{r}: {value!r} ≠ исходник {src_sheet}!{src_cell} '
+                         f'= {raw!r} ({expected!r} долей) — {where}')
+                if row['Единица'] != '%':
+                    fail(f'«{FLAT_SHEET}»!N{r}: единица значения шкалы {row["Единица"]!r} ({where})')
+                if not 0 <= value <= 1:
+                    fail(f'«{FLAT_SHEET}»!M{r}: скидка должна быть долей 0..1, а не {value!r} ({where})')
+        else:
+            n_plan += 1
+            if src_sheet in src_wb.sheetnames and src_cell:
+                raw = src_val[src_sheet][src_cell].value
+                checked['flat'] += 1
+                if not value_equal(value, raw):
+                    fail(f'«{FLAT_SHEET}»!M{r}: {value!r} ≠ исходник {src_sheet}!{src_cell} = {raw!r}')
+
+        # ── служебные ключи: формула + правильный кэш ──────────────────────
+        expect_keys = {
+            'Ключ: строка': f'{dealer}|{section}|{category}|{row["№ строки"]}',
+            'Ключ: тир': f'{dealer}|{section}|{category}|{row["№ тира"]}',
+            'Ключ: значение': f'{dealer}|{section}|{category}|{row["№ строки"]}|{row["№ тира"]}',
+            'Ключ: порядок строки': f'{dealer}|{section}|{row["№ строки"]}',
+            'Ключ: итог': (f'{dealer}|{section}|{category}|{row["№ тира"]}'
+                           if row['Итог'] == 'да' else ''),
+            'Ключ: колонка плана': f'{dealer}|{row["№ тира"]}' if section == 'План' else '',
+        }
+        for name, expected in expect_keys.items():
+            c = col[name]
+            formula = flat_ws.cell(r, c).value
+            cached_value = flat_val_ws.cell(r, c).value
+            if not isinstance(formula, str) or not formula.startswith('='):
+                fail(f'«{FLAT_SHEET}»!{get_column_letter(c)}{r}: ключ «{name}» не формула')
+                continue
+            checked['flat_keys'] += 1
+            if (cached_value or '') != expected:
+                fail(f'«{FLAT_SHEET}»!{get_column_letter(c)}{r}: кэш ключа «{name}» = '
+                     f'{cached_value!r}, ожидалось {expected!r}')
+
+    if len(dealers) != 18:
+        fail(f'в плоской таблице {len(dealers)} дилеров (ожидалось 18)')
+    if n_scale < 800:
+        fail(f'значений шкал всего {n_scale} — похоже, часть таблиц потерялась')
+    if n_plan < 250:
+        fail(f'плановых значений всего {n_plan} — похоже, шапка плана потерялась')
+    if categories != {'Оборудование', 'Расходные материалы', 'Сервис (ЗЧ)'}:
+        fail(f'категории шкал: {sorted(categories)}')
+    note(f'плоская таблица: {len(keys)} записей ({n_scale} значений шкал, {n_plan} плановых) '
+         f'по {len(dealers)} дилерам; сверено с исходником ячеек: {checked["flat"]}, '
+         f'ключей: {checked["flat_keys"]}')
+    return dealers
 
 
-def check_registry_completeness(reg_ws, tgt_ws, blocks_geometry):
+def showcase_layout(sc_val_ws):
+    """Строки блоков витрины — ищем по заголовкам разделов в колонке A."""
+    titles = {
+        'plan': 'ПЛАН И БОНУСЫ',
+        'equipment': 'ОБОРУДОВАНИЕ — шкала скидок',
+        'materials': 'РАСХОДНЫЕ МАТЕРИАЛЫ — шкала скидок',
+        'service': 'СЕРВИС (ЗЧ) — шкала скидок',
+        'compare': 'СРАВНЕНИЕ ДИЛЕРОВ — строка ИТОГО по оборудованию',
+    }
+    found = {}
+    for r in range(1, sc_val_ws.max_row + 1):
+        v = sc_val_ws.cell(r, 1).value
+        if isinstance(v, str):
+            for key, title in titles.items():
+                if v.strip() == title:
+                    found[key] = r
+    for key, title in titles.items():
+        if key not in found:
+            fail(f'на витрине нет раздела «{title}»')
+    return found
+
+
+def check_showcase(sc_ws, sc_val_ws, flat_ws, flat_val_ws, dealers):
     """
-    Каждая непустая ячейка блока должна быть учтена в реестре: либо своей
-    записью (колонка «Ячейка в «Шкалы»»), либо как подпись строки/граница тира
-    той строки, у которой запись есть, либо как часть объединённой ячейки.
+    Витрина: каждая формула смотрит в плоскую таблицу, а её кэш-значение равно
+    тому, что должно получиться. INDEX/MATCH пересчитываем сами по плоской
+    таблице — так ловятся и неверные ключи, и неверные ссылки, и пустой кэш.
     """
-    header = [c.value for c in reg_ws[2]]
-    try:
-        col_target = header.index('Ячейка в «Шкалы»') + 1
-    except ValueError:
-        fail('в реестре нет колонки «Ячейка в «Шкалы»»')
+    col = {name: i + 1 for i, name in enumerate([c.value for c in flat_ws[1]]) if name}
+    by_value, by_row, by_tier = {}, {}, {}
+    by_order, by_total, by_plancol, type_of = {}, {}, {}, {}
+    flat_dealers = []
+    for r in range(2, flat_ws.max_row + 1):
+        g = lambda name: flat_val_ws.cell(r, col[name]).value  # noqa: E731
+        dealer, section, category = g('Дилер'), g('Раздел'), g('Категория')
+        if not dealer:
+            continue
+        if dealer not in flat_dealers:
+            flat_dealers.append(dealer)
+        rec = {'dealer': dealer, 'section': section, 'category': category,
+               'indicator': g('Показатель'), 'tier': g('Тир'), 'row_no': g('№ строки'),
+               'tier_no': g('№ тира'), 'value': g('Значение'), 'is_total': g('Итог') == 'да',
+               'table': g('Таблица')}
+        by_value.setdefault(f'{dealer}|{section}|{category}|{rec["row_no"]}|{rec["tier_no"]}', rec)
+        by_row.setdefault(f'{dealer}|{section}|{category}|{rec["row_no"]}', rec)
+        by_tier.setdefault(f'{dealer}|{section}|{category}|{rec["tier_no"]}', rec)
+        by_order.setdefault(f'{dealer}|{section}|{rec["row_no"]}', rec)
+        if rec['is_total']:
+            by_total.setdefault(f'{dealer}|{section}|{category}|{rec["tier_no"]}', rec)
+        if section == 'План':
+            by_plancol.setdefault(f'{dealer}|{rec["tier_no"]}', rec)
+        type_of.setdefault(dealer, g('Тип'))
+
+    d0 = sc_val_ws['B4'].value
+    if d0 not in flat_dealers:
+        fail(f'в B4 витрины выбран дилер {d0!r}, которого нет в плоской таблице')
+        return
+    layout = showcase_layout(sc_val_ws)
+    if not layout:
         return
 
-    covered_cells, rows_with_records = set(), set()
-    for r in range(3, reg_ws.max_row + 1):
-        t = reg_ws.cell(r, col_target).value
-        if isinstance(t, str) and re.fullmatch(r'[A-Z]{1,3}\d+', t):
-            covered_cells.add(t)
-            rows_with_records.add(int(re.sub(r'[A-Z]', '', t)))
+    # ── все формулы витрины ссылаются на плоскую таблицу и имеют кэш ────────
+    formulas = cached = 0
+    for row in sc_ws.iter_rows():
+        for cell in row:
+            v = cell.value
+            if not isinstance(v, str) or not v.startswith('='):
+                continue
+            formulas += 1
+            if 'INDEX' in v or 'MATCH' in v:
+                if f"'{FLAT_SHEET}'!" not in v:
+                    fail(f'«{SHOWCASE_SHEET}»!{cell.coordinate}: формула не смотрит в '
+                         f'лист «{FLAT_SHEET}»: {v[:70]}')
+            if sc_val_ws[cell.coordinate].value is not None:
+                cached += 1
+    if formulas == 0:
+        fail('на витрине нет формул — она не будет обновляться при правке плоской таблицы')
+    note(f'витрина: формул {formulas}, с кэш-значениями {cached} '
+         f'(пустые — там, где у дилера нет данных)')
 
-    # ячейки объединённых диапазонов считаем покрытыми, если покрыт их якорь
-    merge_owner = {}
-    for m in tgt_ws.merged_cells.ranges:
-        anchor = f'{get_column_letter(m.min_col)}{m.min_row}'
-        for row in range(m.min_row, m.max_row + 1):
-            for col in range(m.min_col, m.max_col + 1):
-                merge_owner[(row, col)] = anchor
+    def expect(coord, value, what):
+        actual = sc_val_ws[coord].value
+        checked['showcase'] += 1
+        if value is None or value == '':
+            if actual not in (None, ''):
+                fail(f'«{SHOWCASE_SHEET}»!{coord}: {what} — ожидалось пусто, получено {actual!r}')
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            if not isinstance(actual, (int, float)) or abs(actual - value) > 1e-9:
+                fail(f'«{SHOWCASE_SHEET}»!{coord}: {what} — ожидалось {value!r}, получено {actual!r}')
+        elif str(actual or '') != str(value):
+            fail(f'«{SHOWCASE_SHEET}»!{coord}: {what} — ожидалось {value!r}, получено {actual!r}')
 
-    accounted = missing = 0
-    for geom in blocks_geometry:
-        lc = geom['label_col']
-        for r in range(geom['first'], geom['last'] + 1):
-            for c in range(1, tgt_ws.max_column + 1):
-                cell = tgt_ws.cell(r, c)
-                if cell.value is None:
+    # ── шапка: тип, отчётность, заголовок сервиса ─────────────────────────
+    expect('F4', type_of.get(d0, ''), 'тип дилера')
+    expect('H4', 'за квартал' if type_of.get(d0) == 'РФ' else 'за полугодие', 'отчётность')
+    svc = by_value.get(f'{d0}|Шкала|Сервис (ЗЧ)|1|1')
+    expect('J4', svc['table'] if svc else '', 'заголовок шкалы сервиса')
+
+    def table(title_row, section, category, max_rows, label_field):
+        """Проверяет таблицу витрины: подписи, тиры и все значения."""
+        hdr = title_row + 1
+        for j in range(1, 13):
+            coord = f'{get_column_letter(1 + j)}{hdr}'
+            if section == 'План':
+                rec = by_plancol.get(f'{d0}|{j}')
+            else:
+                rec = by_tier.get(f'{d0}|{section}|{category}|{j}')
+            field = 'indicator' if section == 'План' else 'tier'
+            expect(coord, rec[field] if rec else '', f'подпись колонки {j}')
+        for k in range(1, max_rows + 1):
+            r = hdr + k
+            if section == 'План':
+                lab = by_order.get(f'{d0}|План|{k}')
+                label = lab['category'] if lab else ''
+            else:
+                lab = by_row.get(f'{d0}|Шкала|{category}|{k}')
+                label = lab['indicator'] if lab else ''
+            expect(f'A{r}', label, f'подпись строки {k}')
+            for j in range(1, 13):
+                coord = f'{get_column_letter(1 + j)}{r}'
+                if sc_ws[coord].value is None:
                     continue
-                coord = cell.coordinate
-                ok = coord in covered_cells
-                if not ok and (r, c) in merge_owner:
-                    ok = merge_owner[(r, c)] in covered_cells
-                if not ok and r in rows_with_records and lc <= c <= lc + 2:
-                    ok = True  # подпись строки / уточнение / граница тира
-                if ok:
-                    accounted += 1
+                if section == 'План':
+                    rec = by_value.get(f'{d0}|План|{label}|{k}|{j}')
                 else:
-                    missing += 1
-                    fail(f'реестр не описывает ячейку «Шкалы»!{coord} = {str(cell.value)[:40]!r} '
-                         f'(блок {geom["title"]})')
-    note(f'полнота реестра: учтено {accounted} непустых ячеек блоков, не описано {missing}')
+                    rec = by_value.get(f'{d0}|Шкала|{category}|{k}|{j}')
+                expect(coord, rec['value'] if rec else '', f'{label} / колонка {j}')
+
+    table(layout['plan'], 'План', 'Итого по дилеру', 5, 'category')
+    table(layout['equipment'], 'Шкала', 'Оборудование', 9, 'indicator')
+    table(layout['materials'], 'Шкала', 'Расходные материалы', 4, 'indicator')
+    table(layout['service'], 'Шкала', 'Сервис (ЗЧ)', 1, 'indicator')
+
+    # ── сравнение дилеров: строка ИТОГО по оборудованию ───────────────────
+    hdr = layout['compare'] + 1
+    for j in range(1, 7):
+        rec = by_tier.get(f'{d0}|Шкала|Оборудование|{j}')
+        expect(f'{get_column_letter(1 + j)}{hdr}', rec['tier'] if rec else '',
+               f'тир {j} в сравнении')
+    for i, dealer in enumerate(flat_dealers):
+        r = hdr + 1 + i
+        expect(f'A{r}', dealer, f'дилер {i + 1} в сравнении')
+        expect(f'H{r}', type_of.get(dealer, ''), f'тип {dealer}')
+        for j in range(1, 7):
+            rec = by_total.get(f'{dealer}|Шкала|Оборудование|{j}')
+            expect(f'{get_column_letter(1 + j)}{r}', rec['value'] if rec else '',
+                   f'ИТОГО {dealer} / тир {j}')
+
+    # ── выпадающий список дилеров ─────────────────────────────────────────
+    dvs = [dv for dv in sc_ws.data_validations.dataValidation
+           if 'B4' in str(dv.sqref)]
+    if not dvs:
+        fail('в B4 витрины нет выпадающего списка дилеров')
+    else:
+        m = re.search(r'\$W\$(\d+):\$W\$(\d+)', dvs[0].formula1 or '')
+        if not m:
+            fail(f'непонятный источник списка дилеров: {dvs[0].formula1!r}')
+        else:
+            listed = [sc_val_ws.cell(r, 23).value
+                      for r in range(int(m.group(1)), int(m.group(2)) + 1)]
+            if [x for x in listed if x] != flat_dealers:
+                fail('список дилеров в витрине не совпадает с плоской таблицей')
+            note(f'витрина: выпадающий список из {len(flat_dealers)} дилеров, '
+                 f'сверено значений {checked["showcase"]}')
+
 
 
 def main():
@@ -374,7 +607,7 @@ def main():
     if not args.legacy.exists():
         sys.exit(f'нет резервной копии {args.legacy}')
 
-    print('Аудит единого листа шкал')
+    print('Аудит файла шкал (плоская таблица + витрина + блоки)')
     print('=' * 78)
     check_backup_matches_git()
 
@@ -384,9 +617,11 @@ def main():
     new_val = openpyxl.load_workbook(args.new, data_only=True)
 
     # 2. структура
-    if new_wb.sheetnames != [SCALES_SHEET, REGISTRY_SHEET]:
-        fail(f'ожидались листы {[SCALES_SHEET, REGISTRY_SHEET]}, получено {new_wb.sheetnames}')
-    tgt_ws, tgt_val_ws = new_wb[SCALES_SHEET], new_val[SCALES_SHEET]
+    expected = [FLAT_SHEET, SHOWCASE_SHEET, BLOCKS_SHEET]
+    if new_wb.sheetnames != expected:
+        fail(f'ожидались листы {expected}, получено {new_wb.sheetnames}')
+    tgt_ws, tgt_val_ws = new_wb[BLOCKS_SHEET], new_val[BLOCKS_SHEET]
+    flat_ws, flat_val_ws = new_wb[FLAT_SHEET], new_val[FLAT_SHEET]
 
     # 3. блоки
     blocks = find_blocks(tgt_ws)
@@ -432,22 +667,21 @@ def main():
         cells = len(nonempty(src_wb[name]))
         note(f'служебный лист «{name}» ({cells} непустых ячеек) в новый файл не переносился — '
              f'остался в резервной копии {args.legacy.name}')
-    if len(new_wb.worksheets[0].merged_cells.ranges) != sum(
+    if len(tgt_ws.merged_cells.ranges) != sum(
             len(ws.merged_cells.ranges) for ws in src_dealer_sheets):
-        fail('число объединённых ячеек на листе «Шкалы» не равно сумме по вкладкам')
+        fail(f'число объединённых ячеек на листе «{BLOCKS_SHEET}» не равно сумме по вкладкам')
 
-    # 6. реестр
-    if REGISTRY_SHEET in new_wb.sheetnames:
-        check_registry(new_wb[REGISTRY_SHEET], tgt_ws, tgt_val_ws)
-        check_registry_completeness(new_wb[REGISTRY_SHEET], tgt_ws, blocks_geometry)
-    else:
-        fail('нет листа «Реестр»')
+    # 6. плоская таблица (источник данных) и 7. витрина (представление)
+    dealers = check_flat(flat_ws, flat_val_ws, src_wb, src_val)
+    check_showcase(new_wb[SHOWCASE_SHEET], new_val[SHOWCASE_SHEET],
+                   flat_ws, flat_val_ws, dealers)
 
     print('\nПроверено:')
-    for key, label in (('cells', 'ячеек (значение/формула)'), ('formulas', 'формул'),
+    for key, label in (('cells', 'ячеек блоков (значение/формула)'), ('formulas', 'формул блоков'),
                        ('cached', 'кэш-значений формул'), ('styles', 'ячеек (оформление)'),
                        ('merges', 'объединённых ячеек'), ('heights', 'высот строк'),
-                       ('registry', 'адресов в реестре')):
+                       ('flat', 'значений плоской таблицы'), ('flat_keys', 'служебных ключей'),
+                       ('showcase', 'ячеек витрины')):
         print(f'  {label:<28}: {checked[key]}')
 
     if notes and not args.quiet:
@@ -463,7 +697,8 @@ def main():
         if len(problems) > 60:
             print(f'  … и ещё {len(problems) - 60}')
         return 1
-    print('✓ Всё сошлось: единый лист содержит те же данные, что и 18 вкладок исходника.')
+    print('✓ Всё сошлось: плоская таблица, витрина и блоки содержат те же данные, '
+          'что и 18 вкладок исходника.')
     return 0
 
 

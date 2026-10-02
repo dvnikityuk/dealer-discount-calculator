@@ -1,23 +1,29 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Сборка файла шкал: много вкладок → ОДИН лист.
+Сборка файла шкал: 21 вкладка → один файл с тремя листами.
 
 Исходник (по одной вкладке на дилера):
     docs/data_sample/legacy/scales_multisheet_2026.xlsx
 
-Результат:
-    docs/data_sample/scales.xlsx
-      • лист «Шкалы»   — все дилеры друг под другом, каждый блок отделён
-                         строкой-маркером  «### ДИЛЕР …»  (его читает калькулятор);
-      • лист «Реестр»  — справочник: каждое значение шкал отдельной строкой
-                         (дилер / таблица / компонент / тир / значение / адрес ячейки).
-                         На расчёт не влияет, нужен для быстрой проверки и фильтрации.
+Результат — docs/data_sample/scales.xlsx:
+    • лист «Шкалы»   — ПЛОСКАЯ ТАБЛИЦА: одна строка = одно значение
+                       (дилер / раздел / категория / показатель / тир / значение).
+                       Это единственный лист, который читает калькулятор, и
+                       единственный, который нужно править. Без объединённых
+                       ячеек и пустых строк — из него в один клик строится
+                       сводная таблица (Вставка → Сводная таблица).
+    • лист «Витрина» — те же данные глазами: выбор дилера из списка, его план,
+                       три шкалы и сравнение всех дилеров по строке ИТОГО.
+                       Всё считается формулами INDEX/MATCH из листа «Шкалы»,
+                       поэтому витрина всегда актуальна. На расчёт не влияет.
+    • лист «Блоки»   — исходные вкладки друг под другом (над каждой строка-маркер
+                       «### ДИЛЕР …») со всеми формулами и оформлением 1:1.
+                       Нужен для сверки с оригиналом; калькулятор разбирает его,
+                       только если листа «Шкалы» в файле не окажется.
 
-Что переносится 1:1 (ничего не теряется):
-    значения, формулы (ссылки пересчитываются на новые строки) и кэш-значения формул,
-    форматы чисел, шрифты, заливки, границы, выравнивание, объединённые ячейки,
-    высота строк, ширина колонок, группировка строк (сворачивание блока).
+Значения скидок хранятся числами-долями с форматом «0%» (в ячейке 0.14, на
+экране 14%), поэтому сводная таблица может их суммировать и усреднять.
 
 Служебные скрытые листы «Лист1/Лист2/Лист3» (архив 2025 г.) в новый файл не
 переносятся — они остаются в резервной копии legacy/scales_multisheet_2026.xlsx.
@@ -38,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import math
 import re
 import sys
 import zipfile
@@ -51,6 +58,7 @@ try:
     from openpyxl.utils import get_column_letter
     from openpyxl.workbook import Workbook
     from openpyxl.worksheet.cell_range import CellRange
+    from openpyxl.worksheet.datavalidation import DataValidation
     from openpyxl.worksheet.hyperlink import Hyperlink
 except ImportError:  # pragma: no cover
     sys.exit('Нужен openpyxl:  pip install openpyxl')
@@ -59,11 +67,12 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SOURCE = ROOT / 'docs' / 'data_sample' / 'legacy' / 'scales_multisheet_2026.xlsx'
 DEFAULT_OUT = ROOT / 'docs' / 'data_sample' / 'scales.xlsx'
 
-SCALES_SHEET = 'Шкалы'
-REGISTRY_SHEET = 'Реестр'
+FLAT_SHEET = 'Шкалы'         # плоская таблица — источник данных для калькулятора
+SHOWCASE_SHEET = 'Витрина'   # те же данные глазами: формулы INDEX/MATCH из «Шкалы»
+BLOCKS_SHEET = 'Блоки'       # исходные вкладки друг под другом (сверка с оригиналом)
 
 DEALER_MARKER = '### ДИЛЕР'
-REGISTRY_MARKER = '### РЕЕСТР'
+SHOWCASE_MARKER = '### ВИТРИНА'
 
 # Листы, которые исторически не являются дилерами («Лист1», «Лист2», «Лист3»).
 LEGACY_SHEET_RE = re.compile(r'^\s*лист\s*\d*\s*$', re.I)
@@ -93,6 +102,23 @@ A_LEFT = Alignment(horizontal='left', vertical='center')
 A_WRAP = Alignment(vertical='top', wrap_text=True)
 THIN = Side(style='thin', color='FFB4C6E7')
 B_ALL = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+A_HDR = Alignment(horizontal='center', vertical='center', wrap_text=True)
+A_TOP = Alignment(vertical='top')
+A_CENTER = Alignment(horizontal='center', vertical='center')
+F_HDR_KEY = Font(bold=True, size=9, color='FF94A3B8')
+FILL_HDR_KEY = PatternFill('solid', fgColor='FF475569')
+F_KEY = Font(size=9, color='FF94A3B8')
+F_VALUE = Font(size=10, color='FF0F172A')
+F_BODY = Font(size=10, color='FF1F2937')
+F_LABEL = Font(bold=True, size=10, color='FF475569')
+F_SELECTED = Font(bold=True, size=11, color='FF1F4E79')
+FILL_SELECTED = PatternFill('solid', fgColor='FFFFF7E6')
+F_SECTION = Font(bold=True, size=11, color='FF1F4E79')
+FILL_SECTION = PatternFill('solid', fgColor='FFDDEBF7')
+F_TOTAL = Font(bold=True, size=10, color='FF1F4E79')
+FILL_TOTAL = PatternFill('solid', fgColor='FFF2F7FC')
+FILL_STRIPE = PatternFill('solid', fgColor='FFFAFBFD')
+F_HDR_CELL = Font(bold=True, size=10, color='FFFFFFFF')
 
 
 def norm_space(value) -> str:
@@ -386,260 +412,515 @@ def collect_widths(sheets):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 3. Лист «Реестр» — плоский справочник всех значений
+# 3. Плоская таблица: одна строка = одно значение
 # ═══════════════════════════════════════════════════════════════════════════
-REGISTRY_HEADER = [
-    '№', 'Дилер', 'Тип', 'Вкладка (была)', 'Раздел', 'Таблица', 'Период',
-    'Строка / компонент', 'Подпись строки', 'Тир / показатель', 'Значение',
-    'Скидка, %', 'Итоговая строка', 'Ячейка в «Шкалы»', 'Исходная ячейка', 'Примечание',
+# Колонки листа «Шкалы» (A..P) — человеческие, колонки Q..U — служебные ключи
+# для INDEX/MATCH на листе «Витрина». Ключи считаются формулами, поэтому правка
+# имени дилера или добавление строки не ломает витрину.
+#
+#   A Дилер              имя дилера (как в plan.xlsx)
+#   B Тип                РФ | Заруб
+#   C Раздел             Шкала | План
+#   D Категория          Оборудование | Расходные материалы | Сервис (ЗЧ)
+#                        (для плана — строка шапки: Сервис, Оборудование, …)
+#   E Таблица            заголовок таблицы ровно как его видит калькулятор
+#   F Показатель         подпись строки шкалы (для плана — подпись колонки)
+#   G № строки           порядок строки в своей таблице (1…)
+#   H Итог               «да» для строк ИТОГО
+#   I Тир                подпись колонки-тира («до 75», «0–500»)
+#   J № тира             порядок тира (1…), для плана — номер колонки шапки
+#   K Тир от             нижняя граница диапазона (сервис)
+#   L Тир до             верхняя граница диапазона (сервис)
+#   M Значение           число: скидка долей (0.14 = 14%), суммы в евро как есть
+#   N Единица            % | EUR
+#   O Вкладка (была)     вкладка исходного файла
+#   P Ячейка в исходнике адрес ячейки в этой вкладке
+
+FLAT_HEADER = [
+    'Дилер', 'Тип', 'Раздел', 'Категория', 'Таблица', 'Показатель',
+    '№ строки', 'Итог', 'Тир', '№ тира', 'Тир от', 'Тир до',
+    'Значение', 'Единица', 'Вкладка (была)', 'Ячейка в исходнике',
 ]
-REGISTRY_WIDTHS = [5, 34, 7, 24, 12, 34, 22, 58, 26, 16, 14, 10, 9, 15, 15, 34]
+FLAT_WIDTHS = [34, 7, 9, 22, 44, 54, 9, 7, 14, 8, 9, 9, 11, 9, 15, 17]
+FLAT_KEYS_HEADER = ['Ключ: строка', 'Ключ: тир', 'Ключ: значение',
+                    'Ключ: порядок строки', 'Ключ: итог', 'Ключ: колонка плана']
+FMT_PCT = '0%'
+FMT_NUM = '#,##0.##'
+
+# Сколько строк/тиров помещается на витрину (максимум по всем дилерам исходника).
+SC_PLAN_ROWS, SC_PLAN_COLS = 5, 6
+SC_EQ_ROWS, SC_EQ_COLS = 9, 6
+SC_MAT_ROWS, SC_MAT_COLS = 4, 6
+SC_SVC_COLS = 12
 
 
-def normalize_pct(value, number_format, mode):
-    """
-    Какое число показывать в колонке «Скидка, %» реестра:
-      'as-is'          — значение уже в процентах (6 → 6);
-      'service'        — правило калькулятора для шкал сервиса (0.19 → 19, 6 → 6);
-      'percent-format' — по формату ячейки: '0%' → ×100, иначе пусто (шапка плана);
-      'none'           — не процент (текст, суммы в евро).
-    """
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+def js_trim(value) -> str:
+    """String(v).trim() из калькулятора — подписи должны совпадать байт-в-байт."""
+    return str(value).strip()
+
+
+def js_num(value):
+    """parsePctJS из калькулятора: число из ячейки или None."""
+    if value is None or isinstance(value, bool) or value == '':
         return None
-    if mode == 'as-is':
-        return round(value, 6)
-    if mode == 'service':
-        return round(value * 100 if value < 1 else value, 6)
-    if mode == 'percent-format' and '%' in (number_format or ''):
-        return round(value * 100, 6)
-    return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().replace('%', '').replace(',', '.').strip()
+    if s in ('', '—'):
+        return None
+    try:
+        return float(s)
+    except ValueError:
+        return None
 
 
-def registry_records_for_dealer(ws, wsv, info, row_shift):
+def to_fraction(value, number_format):
     """
-    Полный перечень непустых ячеек вкладки, разложенный по таблицам.
-    Возвращает (список записей, множество покрытых координат (row, col)).
+    Значение шкалы → доля (0.14 = 14%), чтобы сводная таблица могла считать.
+
+    В исходнике оборудование и расходные материалы хранятся уже в процентах
+    (число 6 при формате General), а сервис — долей (0.19 при формате '0%').
+    Правило то же, что в калькуляторе: формат с '%' → значение уже доля.
     """
-    lc = info['label_col']
-    hr = info['header_row']
-    recs, covered = [], set()
+    n = js_num(value)
+    if n is None:
+        return None
+    return round(n if '%' in (number_format or '') else n / 100.0, 10)
 
-    def target_coord(r, c):
-        return f'{get_column_letter(c)}{r + row_shift}'
 
-    def source_coord(r, c):
-        return f'{info["sheet"]}!{get_column_letter(c)}{r}'
+def unit_of(number_format) -> str:
+    fmt = number_format or ''
+    if '%' in fmt:
+        return '%'
+    if '€' in fmt or 'EUR' in fmt.upper() or '$' in fmt:
+        return 'EUR'
+    return 'число'
 
-    def add(section, table, period, label, sub, tier, value, fmt, pct_mode, r, c,
-            is_total=False, note=''):
-        if r is not None and c is not None:
-            covered.add((r, c))
-        recs.append({
-            'section': section, 'table': table, 'period': period, 'label': label,
-            'sub': sub, 'tier': tier,
-            'value': None if value is None or value == '' else value,
-            'fmt': fmt, 'pct_mode': pct_mode, 'is_total': is_total, 'note': note,
-            'target': target_coord(r, c) if r is not None else '',
-            'source': source_coord(r, c) if r is not None else '',
-            '_rc': (r, c),
-        })
 
-    # ── 3.1 Шапка плана (выручка / план / бонусы) ──────────────────────────
-    # Каждая ячейка шапки — отдельная запись реестра (значение = текст ячейки),
-    # чтобы любую запись можно было сверить с её ячейкой на листе «Шкалы».
+def js_scale_titles(info):
+    """
+    Заголовки таблиц ровно такие, какие выдаёт калькулятор.
+
+    Это важно: по словам «6 месяцев» в заголовке сервиса калькулятор берёт
+    полугодие вместо финансового года, а по слову «Оборудование» находит таблицу.
+    """
+    period = 'за квартал' if info['type'] == 'РФ' else 'за полугодие'
+    svc = ('Сервис (ЗЧ) — расчёт по парку оборудования' if info['type'] == 'РФ'
+           else f'Сервис (ЗЧ) — абсолютные отгрузки за {info["service"]["period"]}')
+    return {
+        'equipment': f'Оборудование — {period}',
+        'materials': f'Расходные материалы — {period}',
+        'service': svc,
+    }
+
+
+def flat_records_for_dealer(ws, wsv, info):
+    """
+    Плоские записи одного дилера: план/бонусы + три шкалы.
+
+    Подписи, порядок строк и набор значений — ровно те, которые оставляет
+    калькулятор (docs/index.html): пустые строки и подзаголовок «ОБЪЕМ ЗАКУПОК
+    В ТЫС…» в плоскую таблицу не попадают, иначе разбор плоского листа и разбор
+    вкладок дали бы разные результаты.
+    """
+    lc, hr = info['label_col'], info['header_row']
+    recs = []
+
+    def add(**kw):
+        rec = {
+            'dealer': info['name'], 'type': info['type'], 'sheet': info['sheet'],
+            'section': '', 'category': '', 'table': '', 'indicator': '', 'row_no': 0,
+            'is_total': False, 'tier': '', 'tier_no': 0, 'tier_from': None,
+            'tier_to': None, 'value': None, 'unit': '', 'fmt': None, 'cell': '',
+        }
+        rec.update(kw)
+        recs.append(rec)
+
+    # ── План и бонусы (шапка «Выручка … / План … / Прирост / Бонус») ────────
     headers = {}
     for c in range(lc + 1, ws.max_column + 1):
         v = ws.cell(hr, c).value
         if isinstance(v, str) and v.strip():
-            headers[c] = norm_space(v)
-            add('План', 'Шапка плана', '', '(заголовок колонки)', None, headers[c],
-                v, None, 'none', hr, c)
-    if ws.cell(hr, lc).value is not None:
-        add('План', 'Шапка плана', '', '(левый край шапки)', None, None,
-            ws.cell(hr, lc).value, None, 'none', hr, lc)
-
+            headers[c] = (len(headers) + 1, js_trim(v))
     for r in range(hr + 1, min(hr + 4, ws.max_row) + 1):
-        label = ws.cell(r, lc).value
-        if label is None:
+        label_raw = ws.cell(r, lc).value
+        if label_raw is None or not js_trim(label_raw):
             continue
-        label = norm_space(label)
-        covered.add((r, lc))
-        emitted = 0
-        for c in range(lc + 1, ws.max_column + 1):
-            vc = wsv.cell(r, c)
-            if vc.value is None or (isinstance(vc.value, str) and not vc.value.strip()):
-                continue
-            fmt_cell = ws.cell(r, c)
-            covered.add((r, c))
-            is_text = isinstance(vc.value, str)
-            recs.append({
-                'section': 'План', 'table': 'План и бонусы', 'period': '',
-                'label': label, 'sub': None,
-                'tier': headers.get(c, 'подпись справа'),
-                'value': vc.value, 'fmt': fmt_cell.number_format,
-                'pct_mode': 'none' if is_text else 'percent-format',
-                'is_total': bool(ITOGO_RE.search(label)),
-                'note': '' if c in headers else 'подпись/примечание справа от плана',
-                'target': target_coord(r, c), 'source': source_coord(r, c),
-                '_rc': (r, c),
-            })
-            emitted += 1
-        if not emitted:
-            add('План', 'План и бонусы', '', label, None, None,
-                ws.cell(r, lc).value, None, 'none', r, lc,
-                note='в строке нет числовых значений')
+        category = 'Итого по дилеру' if r == hr + 1 else js_trim(label_raw)
+        for c, (col_no, hdr) in headers.items():
+            n = js_num(wsv.cell(r, c).value)
+            if n is None:
+                continue                      # текстовые примечания не переносим
+            fmt = ws.cell(r, c).number_format
+            add(section='План', category=category, table='План и бонусы',
+                indicator=hdr, row_no=r - hr, tier='', tier_no=col_no,
+                value=n, unit=unit_of(fmt),
+                fmt=fmt if fmt and fmt != 'General' else FMT_NUM,
+                cell=f'{get_column_letter(c)}{r}')
 
-    # ── 3.2 Таблицы шкал (оборудование / РМ) ───────────────────────────────
-    for key, table_name, extra_stop in (
+    # ── Шкалы: оборудование и расходные материалы ──────────────────────────
+    titles = js_scale_titles(info)
+    for key, category, drop_re in (
         ('equipment', 'Оборудование', re.compile(r'ОБЪЕМ\s+ЗАКУПОК\s+В\s+ТЫС', re.I)),
         ('materials', 'Расходные материалы', None),
     ):
         t = info[key]
         if not t['tiers']:
             continue
-        period = t['period']
-        if t['hdr']:
-            covered.add((t['hdr'], lc))
-            add('Шкала', table_name, period, '(заголовок раздела)', None, None,
-                ws.cell(t['hdr'], lc).value, None, 'none', t['hdr'], lc)
-        for tc_col, tier_label in t['tiers']:
-            add('Шкала', table_name, period, '(шапка тиров)', None, tier_label,
-                ws.cell(t['tier_row'], tc_col).value, None, 'none', t['tier_row'], tc_col,
-                note='граница тира; значения под ней считаются по этому диапазону')
+        row_no = 0
         for row in t['rows']:
-            covered.add((row['row'], lc))
-            if row['sub']:
-                covered.add((row['row'], lc + 1))
-            note = ''
-            if extra_stop and extra_stop.search(row['label'].upper()):
-                note = 'подзаголовок — калькулятор строку отфильтровывает'
-            if row['empty']:
-                note = (note + '; ' if note else '') + 'пустая строка (в расчёте не участвует)'
-            emitted = 0
-            for (c, value, fmt), (_tc, tier) in zip(row['values'], t['tiers']):
-                if value is None or value == '':
+            label = js_trim(ws.cell(row['row'], lc).value)
+            if drop_re and drop_re.search(label.upper()):
+                continue                      # подзаголовок — калькулятор его фильтрует
+            if not any(js_num(v) is not None for _c, v, _f in row['values']):
+                continue                      # пустая строка — калькулятор её пропускает
+            row_no += 1
+            for tier_no, ((c, value, fmt), (_tc, tier)) in enumerate(
+                    zip(row['values'], t['tiers']), 1):
+                frac = to_fraction(value, fmt)
+                if frac is None:
                     continue
-                covered.add((row['row'], c))
-                emitted += 1
-                recs.append({
-                    'section': 'Шкала', 'table': table_name, 'period': period,
-                    'label': row['label'], 'sub': row['sub'], 'tier': tier,
-                    'value': value, 'fmt': fmt, 'pct_mode': 'as-is',
-                    'is_total': row['is_total'], 'note': note,
-                    'target': target_coord(row['row'], c),
-                    'source': source_coord(row['row'], c),
-                    '_rc': (row['row'], c),
-                })
-            if not emitted:
-                add('Шкала', table_name, period, row['label'], row['sub'], None,
-                    ws.cell(row['row'], lc).value, None, 'none', row['row'], lc,
-                    note=note or 'значений по тирам нет')
+                add(section='Шкала', category=category, table=titles[key],
+                    indicator=label, row_no=row_no,
+                    is_total=bool(ITOGO_RE.search(label)),
+                    tier=tier, tier_no=tier_no, value=frac, unit='%', fmt=FMT_PCT,
+                    cell=f'{get_column_letter(c)}{row["row"]}')
 
-    # ── 3.3 Сервис (ЗЧ) ────────────────────────────────────────────────────
+    # ── Шкала сервиса: каждая строка исходника — это один тир (диапазон) ────
     svc = info['service']
-    if svc['hdr']:
-        covered.add((svc['hdr'], lc))
-        add('Шкала', svc['table'], svc['period'], '(заголовок раздела)', None, None,
-            ws.cell(svc['hdr'], lc).value, None, 'none', svc['hdr'], lc)
+    tier_no = 0
     for row in svc['rows']:
-        covered.add((row['row'], lc))
-        for offset, what in ((1, 'от'), (2, 'до')):
-            c = lc + offset
-            if wsv.cell(row['row'], c).value is not None:
-                covered.add((row['row'], c))
         c, value, fmt = row['pct_cell']
-        if value is not None:
-            covered.add((row['row'], c))
-        recs.append({
-            'section': 'Шкала', 'table': svc['table'], 'period': svc['period'],
-            'label': row['label'], 'sub': None, 'tier': row['tier'],
-            'value': value, 'fmt': fmt, 'pct_mode': 'service', 'is_total': True,
-            'note': '' if row['used_by_calc'] else 'пусто — в расчёте не участвует',
-            'target': target_coord(row['row'], c), 'source': source_coord(row['row'], c),
-            '_rc': (row['row'], c),
-        })
-    # Прочие ЧИСЛОВЫЕ строки раздела сервиса (например, «без статуса партнера»):
-    # в расчёте не участвуют, но в реестре должны быть. Длинные тексты и подписи
-    # оставляем общему проходу ниже — это примечания, а не строки шкалы.
-    if svc['hdr']:
-        for r in range(svc['hdr'] + 1, ws.max_row + 1):
-            if info['control']['hdr'] and r >= info['control']['hdr']:
-                break
-            label_raw = ws.cell(r, lc).value
-            label = norm_space(label_raw) if label_raw is not None else ''
-            if len(label) > 60:
-                continue                      # примечание — уйдёт в общий проход
-            if label and (r, lc) in covered:
-                continue                      # строка уже описана (диапазоны/заголовок)
-            sub_raw = ws.cell(r, lc + 1).value
-            sub = norm_space(sub_raw) if isinstance(sub_raw, str) else None
-            row_label = label or sub or ''
-            for c in range(lc + 1, ws.max_column + 1):
-                if (r, c) in covered:
-                    continue
-                vc = wsv.cell(r, c)
-                if isinstance(vc.value, bool) or not isinstance(vc.value, (int, float)):
-                    continue                  # тексты — в общий проход
-                covered.add((r, c))
-                recs.append({
-                    'section': 'Шкала', 'table': svc['table'], 'period': svc['period'],
-                    'label': row_label, 'sub': None,
-                    'tier': sub if c > lc + 1 else '',
-                    'value': vc.value, 'fmt': ws.cell(r, c).number_format,
-                    'pct_mode': 'service', 'is_total': False,
-                    'note': 'калькулятор эту строку не использует',
-                    'target': target_coord(r, c), 'source': source_coord(r, c),
-                    '_rc': (r, c),
-                })
-            if label:
-                covered.add((r, lc))
+        frac = to_fraction(value, fmt)
+        if frac is None:
+            continue                          # JS: if (pct === null) continue
+        tier_no += 1
+        from_n = js_num(row['from']) or 0.0
+        to_n = js_num(row['to']) or 0.0
+        tier = (f'{math.floor(from_n)}+' if not to_n
+                else f'{math.floor(from_n)}–{math.floor(to_n)}')
+        add(section='Шкала', category='Сервис (ЗЧ)', table=titles['service'],
+            indicator='Скидка по сервису', row_no=1, is_total=True,
+            tier=tier, tier_no=tier_no,
+            tier_from=row['from'] if isinstance(row['from'], (int, float)) else None,
+            tier_to=row['to'] if isinstance(row['to'], (int, float)) else None,
+            value=frac, unit='%', fmt=FMT_PCT,
+            cell=f'{get_column_letter(c)}{row["row"]}')
+    return recs
 
-    # ── 3.4 Система контроля (штрафы) — только РФ ──────────────────────────
-    ctrl = info['control']
-    if ctrl['hdr']:
-        covered.add((ctrl['hdr'], lc))
-        add('Контроль', 'Система контроля (штрафы)', 'квартал', '(заголовок раздела)', None, None,
-            ws.cell(ctrl['hdr'], lc).value, None, 'none', ctrl['hdr'], lc)
-        for row in ctrl['rows']:
-            covered.add((row['row'], lc))
-            if isinstance(row['sub'], str):
-                covered.add((row['row'], lc + 1))
-            c, value, fmt = row['value_cell']
-            if value is not None:
-                covered.add((row['row'], c))
-            recs.append({
-                'section': 'Контроль', 'table': 'Система контроля (штрафы)', 'period': 'квартал',
-                'label': row['label'], 'sub': row['sub'], 'tier': row['sub'] or 'значение',
-                'value': value, 'fmt': fmt, 'pct_mode': 'as-is', 'is_total': False,
-                'note': 'калькулятор не рассчитывает, хранится для полноты',
-                'target': target_coord(row['row'], c), 'source': source_coord(row['row'], c),
-                '_rc': (row['row'], c),
-            })
 
-    # ── 3.5 Всё остальное (примечания, заголовки, непонятные ячейки) ────────
-    for r in range(1, ws.max_row + 1):
-        for c in range(1, ws.max_column + 1):
-            if (r, c) in covered:
-                continue
-            vc = wsv.cell(r, c)
-            if vc.value is None or (isinstance(vc.value, str) and not vc.value.strip()):
-                continue
-            covered.add((r, c))
-            text = vc.value
-            is_note = isinstance(text, str) and len(text) > 60
-            recs.append({
-                'section': 'Примечание' if is_note else 'Прочее',
-                'table': 'Примечание' if is_note else 'Прочее',
-                'period': '',
-                'label': norm_space(ws.cell(r, lc).value) if c != lc and ws.cell(r, lc).value else '',
-                'sub': None, 'tier': '',
-                'value': text, 'fmt': ws.cell(r, c).number_format, 'pct_mode': 'none',
-                'is_total': False,
-                'note': 'текстовое примечание' if is_note else '',
-                'target': target_coord(r, c), 'source': source_coord(r, c),
-                '_rc': (r, c),
-            })
-    return recs, covered
+def rec_keys(rec):
+    """Служебные ключи записи (колонки Q..U) — по ним витрина ищет значения."""
+    d, s, c = rec['dealer'], rec['section'], rec['category']
+    return {
+        'row': f'{d}|{s}|{c}|{rec["row_no"]}',
+        'tier': f'{d}|{s}|{c}|{rec["tier_no"]}',
+        'value': f'{d}|{s}|{c}|{rec["row_no"]}|{rec["tier_no"]}',
+        'order': f'{d}|{s}|{rec["row_no"]}',
+        'total': f'{d}|{s}|{c}|{rec["tier_no"]}' if rec['is_total'] else '',
+        # Подписи колонок шапки плана ищем без категории: в строке «Итого по
+        # дилеру» заполнены не все колонки (бонус и скидка есть только у категорий).
+        'plancol': f'{d}|{rec["tier_no"]}' if s == 'План' else '',
+    }
+
+
+def build_flat_sheet(out_wb, records):
+    """Лист «Шкалы»: плоская таблица (источник данных для калькулятора)."""
+    ws = out_wb.active
+    ws.title = FLAT_SHEET
+    ws.sheet_view.showGridLines = True
+
+    ncol = len(FLAT_HEADER)
+    for c, title in enumerate(FLAT_HEADER, 1):
+        cell = ws.cell(1, c, title)
+        cell.font = F_HDR
+        cell.fill = FILL_HDR
+        cell.border = B_ALL
+        cell.alignment = A_HDR
+        ws.column_dimensions[get_column_letter(c)].width = FLAT_WIDTHS[c - 1]
+    key_first = ncol + 1
+    for i, title in enumerate(FLAT_KEYS_HEADER):
+        c = key_first + i
+        cell = ws.cell(1, c, title)
+        cell.font = F_HDR_KEY
+        cell.fill = FILL_HDR_KEY
+        cell.border = B_ALL
+        cell.alignment = A_HDR
+        ws.column_dimensions[get_column_letter(c)].width = 42
+    ws.row_dimensions[1].height = 30
+
+    cached: dict[str, object] = {}
+    row = 2
+    for rec in records:
+        keys = rec_keys(rec)
+        values = [
+            rec['dealer'], rec['type'], rec['section'], rec['category'], rec['table'],
+            rec['indicator'], rec['row_no'], 'да' if rec['is_total'] else None,
+            rec['tier'] or None, rec['tier_no'], rec['tier_from'], rec['tier_to'],
+            rec['value'], rec['unit'], rec['sheet'], rec['cell'],
+        ]
+        for c, v in enumerate(values, 1):
+            cell = ws.cell(row, c, v)
+            cell.alignment = A_TOP
+            if c == 13 and isinstance(v, (int, float)):
+                cell.number_format = rec['fmt'] or FMT_NUM
+                cell.font = F_VALUE
+            elif c in (7, 8, 10, 11, 12, 14):
+                cell.alignment = A_CENTER
+        # Служебные ключи — формулы, чтобы правки в таблице не ломали витрину.
+        f = row
+        formulas = [
+            (f'=A{f}&"|"&C{f}&"|"&D{f}&"|"&G{f}', keys['row']),
+            (f'=A{f}&"|"&C{f}&"|"&D{f}&"|"&J{f}', keys['tier']),
+            (f'=A{f}&"|"&C{f}&"|"&D{f}&"|"&G{f}&"|"&J{f}', keys['value']),
+            (f'=A{f}&"|"&C{f}&"|"&G{f}', keys['order']),
+            (f'=IF(H{f}="да",A{f}&"|"&C{f}&"|"&D{f}&"|"&J{f},"")', keys['total']),
+            (f'=IF(C{f}="План",A{f}&"|"&J{f},"")', keys['plancol']),
+        ]
+        for i, (formula, value) in enumerate(formulas):
+            cell = ws.cell(row, key_first + i, formula)
+            cell.font = F_KEY
+            cell.alignment = A_TOP
+            cached[cell.coordinate] = value
+        row += 1
+
+    last = row - 1
+    ws.freeze_panes = 'B2'
+    ws.auto_filter.ref = f'A1:{get_column_letter(ncol)}{last}'
+    # Служебные ключи сворачиваем в группу: не мешают ни глазам, ни сводной.
+    ws.column_dimensions.group(get_column_letter(key_first),
+                               get_column_letter(key_first + len(FLAT_KEYS_HEADER) - 1),
+                               outline_level=1, hidden=True)
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_title_rows = '1:1'
+    return cached, last
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 3б. Витрина: кросс-таблица на формулах (INDEX/MATCH из плоской таблицы)
+# ═══════════════════════════════════════════════════════════════════════════
+class Showcase:
+    """Пишет лист «Витрина» и сразу знает, что должна показать каждая формула."""
+
+    def __init__(self, ws, records, dealers):
+        self.ws = ws
+        self.dealers = dealers            # имена дилеров в порядке следования
+        self.cached: dict[str, object] = {}
+        self.by_value, self.by_row, self.by_tier = {}, {}, {}
+        self.by_order, self.by_total, self.type_of = {}, {}, {}
+        self.by_plancol = {}
+        for rec in records:
+            k = rec_keys(rec)
+            if k['plancol']:
+                self.by_plancol.setdefault(k['plancol'], rec)
+            self.by_value.setdefault(k['value'], rec)
+            self.by_row.setdefault(k['row'], rec)
+            self.by_tier.setdefault(k['tier'], rec)
+            self.by_order.setdefault(k['order'], rec)
+            if rec['is_total'] and k['total']:
+                self.by_total.setdefault(k['total'], rec)
+            self.type_of.setdefault(rec['dealer'], rec['type'])
+        self.sel = '$B$4'                 # ячейка с выбранным дилером
+
+    def put(self, coord, formula, value, fmt=None, font=None, fill=None, align=None):
+        """Формула + её кэш-значение (чтобы числа было видно до пересчёта)."""
+        cell = self.ws[coord]
+        cell.value = formula
+        if fmt:
+            cell.number_format = fmt
+        cell.font = font or F_BODY
+        if fill:
+            cell.fill = fill
+        cell.alignment = align or A_CENTER
+        cell.border = B_ALL
+        self.cached[coord] = '' if value is None else value
+        return cell
+
+    @staticmethod
+    def lookup(index, key, field):
+        rec = index.get(key)
+        return rec[field] if rec else None
+
+    def table(self, top, section, category, rows, cols, label_header):
+        """Таблица «показатели × тиры» для выбранного дилера. top — строка шапки."""
+        FS = f"'{FLAT_SHEET}'"
+        ws = self.ws
+        d0 = self.dealers[0]
+        label_col = 'I'
+
+        head = ws.cell(top, 1, label_header)
+        head.font, head.fill, head.border, head.alignment = F_HDR_CELL, FILL_HDR, B_ALL, A_LEFT
+        for j in range(1, cols + 1):
+            if section == 'План':
+                # Подписи колонок шапки плана — по ключу «дилер|номер колонки»:
+                # в строке «Итого по дилеру» бонус и скидка могут быть пустыми.
+                formula = (f'=IFERROR(INDEX({FS}!$F:$F,MATCH({self.sel}&"|"&{j},'
+                           f'{FS}!$V:$V,0)),"")')
+                value = self.lookup(self.by_plancol, f'{d0}|{j}', 'indicator')
+            else:
+                formula = (f'=IFERROR(INDEX({FS}!${label_col}:${label_col},'
+                           f'MATCH({self.sel}&"|"&"{section}"&"|"&"{category}"&"|"&{j},'
+                           f'{FS}!$R:$R,0)),"")')
+                value = self.lookup(self.by_tier, f'{d0}|{section}|{category}|{j}', 'tier')
+            self.put(f'{get_column_letter(1 + j)}{top}', formula, value,
+                     font=F_HDR_CELL, fill=FILL_HDR)
+
+        for k in range(1, rows + 1):
+            r = top + k
+            if section == 'План':
+                label_formula = (f'=IFERROR(INDEX({FS}!$D:$D,MATCH({self.sel}&"|"&'
+                                 f'"План"&"|"&{k},{FS}!$T:$T,0)),"")')
+                label_value = self.lookup(self.by_order, f'{d0}|План|{k}', 'category')
+            else:
+                label_formula = (f'=IFERROR(INDEX({FS}!$F:$F,MATCH({self.sel}&"|"&'
+                                 f'"Шкала"&"|"&"{category}"&"|"&{k},{FS}!$Q:$Q,0)),"")')
+                label_value = self.lookup(self.by_row, f'{d0}|Шкала|{category}|{k}',
+                                          'indicator')
+            lc = ws.cell(r, 1, label_formula)
+            lc.font, lc.alignment, lc.border = F_BODY, A_LEFT, B_ALL
+            self.cached[lc.coordinate] = label_value or ''
+            for j in range(1, cols + 1):
+                if section == 'План':
+                    key_expr = f'{self.sel}&"|"&"План"&"|"&$A{r}&"|"&{k}&"|"&{j}'
+                    rec = self.by_value.get(f'{d0}|План|{label_value}|{k}|{j}')
+                else:
+                    key_expr = f'{self.sel}&"|"&"Шкала"&"|"&"{category}"&"|"&{k}&"|"&{j}'
+                    rec = self.by_value.get(f'{d0}|Шкала|{category}|{k}|{j}')
+                is_total = bool(rec and rec['is_total'])
+                self.put(f'{get_column_letter(1 + j)}{r}',
+                         f'=IFERROR(INDEX({FS}!$M:$M,MATCH({key_expr},{FS}!$S:$S,0)),"")',
+                         rec['value'] if rec else None,
+                         fmt=(rec['fmt'] or FMT_NUM) if (section == 'План' and rec) else FMT_PCT,
+                         font=F_TOTAL if is_total else F_BODY,
+                         fill=FILL_TOTAL if is_total else None)
+        return top + rows + 1
+
+
+def build_showcase_sheet(out_wb, records, dealers):
+    """Лист «Витрина»: выбор дилера → план и три шкалы + сравнение дилеров."""
+    ws = out_wb.create_sheet(SHOWCASE_SHEET)
+    sc = Showcase(ws, records, dealers)
+    d0 = dealers[0]
+    ncol = 14
+    FS = f"'{FLAT_SHEET}'"
+
+    def section_title(row, text):
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=ncol)
+        c = ws.cell(row, 1, text)
+        c.font, c.fill, c.alignment = F_SECTION, FILL_SECTION, A_LEFT
+        ws.row_dimensions[row].height = 18
+
+    def label(coord, text):
+        c = ws[coord]
+        c.value = text
+        c.font = F_LABEL
+        c.alignment = Alignment(horizontal='right', vertical='center')
+
+    # ── шапка и выбор дилера ───────────────────────────────────────────────
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncol)
+    m = ws.cell(1, 1, f'{SHOWCASE_MARKER} • здесь всё считается формулами из листа '
+                      f'«{FLAT_SHEET}». Править нужно там — витрина обновится сама. '
+                      f'Лист справочный: калькулятор его не читает.')
+    m.font, m.fill, m.alignment = F_MARK, FILL_MARK, A_LEFT
+    ws.row_dimensions[1].height = 20
+
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ncol)
+    h = ws.cell(2, 1, 'Выберите дилера в ячейке B4 — ниже появятся его план и бонусы, '
+                      'шкала оборудования, расходных материалов и сервиса. '
+                      'В конце листа — сравнение всех дилеров по строке ИТОГО.')
+    h.font, h.alignment = F_HINT, A_LEFT
+
+    label('A4', 'Дилер:')
+    ws.merge_cells('B4:D4')
+    sel = ws.cell(4, 2, d0)
+    sel.font, sel.fill, sel.border, sel.alignment = F_SELECTED, FILL_SELECTED, B_ALL, A_LEFT
+    label('E4', 'Тип:')
+    sc.put('F4', f'=IFERROR(INDEX({FS}!$B:$B,MATCH({sc.sel},{FS}!$A:$A,0)),"")',
+           sc.type_of.get(d0, ''), font=F_SELECTED, fill=FILL_SELECTED, align=A_LEFT)
+    label('G4', 'Отчётность:')
+    sc.put('H4', '=IF($F$4="РФ","за квартал","за полугодие")',
+           'за квартал' if sc.type_of.get(d0) == 'РФ' else 'за полугодие',
+           font=F_SELECTED, fill=FILL_SELECTED, align=A_LEFT)
+    label('I4', 'Сервис (ЗЧ):')
+    ws.merge_cells('J4:N4')
+    sc.put('J4', f'=IFERROR(INDEX({FS}!$E:$E,MATCH({sc.sel}&"|"&"Шкала"&"|"&'
+                 f'"Сервис (ЗЧ)"&"|"&1&"|"&1,{FS}!$S:$S,0)),"")',
+           sc.lookup(sc.by_value, f'{d0}|Шкала|Сервис (ЗЧ)|1|1', 'table'),
+           font=F_SELECTED, fill=FILL_SELECTED, align=A_LEFT)
+    ws.row_dimensions[4].height = 20
+
+    # ── план и три шкалы выбранного дилера ─────────────────────────────────
+    section_title(6, 'ПЛАН И БОНУСЫ')
+    sc.table(7, 'План', 'Итого по дилеру', SC_PLAN_ROWS, SC_PLAN_COLS, 'Категория')
+    section_title(14, 'ОБОРУДОВАНИЕ — шкала скидок')
+    sc.table(15, 'Шкала', 'Оборудование', SC_EQ_ROWS, SC_EQ_COLS, 'Показатель')
+    section_title(26, 'РАСХОДНЫЕ МАТЕРИАЛЫ — шкала скидок')
+    sc.table(27, 'Шкала', 'Расходные материалы', SC_MAT_ROWS, SC_MAT_COLS, 'Показатель')
+    section_title(33, 'СЕРВИС (ЗЧ) — шкала скидок')
+    sc.table(34, 'Шкала', 'Сервис (ЗЧ)', 1, SC_SVC_COLS, 'Показатель')
+
+    # ── сравнение всех дилеров по строке ИТОГО (оборудование) ──────────────
+    section_title(37, 'СРАВНЕНИЕ ДИЛЕРОВ — строка ИТОГО по оборудованию')
+    top = 38
+    head = ws.cell(top, 1, 'Дилер')
+    head.font, head.fill, head.border, head.alignment = F_HDR_CELL, FILL_HDR, B_ALL, A_LEFT
+    for j in range(1, SC_EQ_COLS + 1):
+        sc.put(f'{get_column_letter(1 + j)}{top}', f'={get_column_letter(1 + j)}15',
+               sc.lookup(sc.by_tier, f'{d0}|Шкала|Оборудование|{j}', 'tier'),
+               font=F_HDR_CELL, fill=FILL_HDR)
+    type_col = 2 + SC_EQ_COLS
+    th = ws.cell(top, type_col, 'Тип')
+    th.font, th.fill, th.border, th.alignment = F_HDR_CELL, FILL_HDR, B_ALL, A_CENTER
+
+    list_first = top + 1
+    for i, dealer in enumerate(dealers):
+        r = list_first + i
+        name = ws.cell(r, 1, f'=$W${4 + i}')
+        name.font, name.alignment, name.border = F_BODY, A_LEFT, B_ALL
+        sc.cached[name.coordinate] = dealer
+        for j in range(1, SC_EQ_COLS + 1):
+            rec = sc.by_total.get(f'{dealer}|Шкала|Оборудование|{j}')
+            sc.put(f'{get_column_letter(1 + j)}{r}',
+                   f'=IFERROR(INDEX({FS}!$M:$M,MATCH($A{r}&"|"&"Шкала"&"|"&'
+                   f'"Оборудование"&"|"&{j},{FS}!$U:$U,0)),"")',
+                   rec['value'] if rec else None, fmt=FMT_PCT, font=F_TOTAL)
+        tcell = ws.cell(r, type_col, f'=IFERROR(INDEX({FS}!$B:$B,'
+                                     f'MATCH($A{r},{FS}!$A:$A,0)),"")')
+        tcell.font, tcell.alignment, tcell.border = F_BODY, A_CENTER, B_ALL
+        sc.cached[tcell.coordinate] = sc.type_of.get(dealer, '')
+        if i % 2 == 1:
+            for c in range(1, type_col + 1):
+                ws.cell(r, c).fill = FILL_STRIPE
+    list_last = list_first + len(dealers) - 1
+
+    # ── служебный список дилеров (источник выпадающего списка в B4) ─────────
+    ws.cell(3, 23, 'Список дилеров — служебный: источник выпадающего списка в B4, '
+                   'пересобирается скриптом').font = F_HINT
+    for i, dealer in enumerate(dealers):
+        ws.cell(4 + i, 23, dealer).font = F_KEY
+    ws.column_dimensions['W'].width = 34
+    ws.column_dimensions.group('V', 'X', outline_level=1, hidden=True)
+
+    dv = DataValidation(type='list', formula1=f'=$W$4:$W${4 + len(dealers) - 1}',
+                        allow_blank=False, showDropDown=False)
+    dv.errorTitle = 'Нет такого дилера'
+    dv.error = 'Выберите дилера из списка (ячейка B4).'
+    ws.add_data_validation(dv)
+    dv.add(ws['B4'])
+
+    # ── ширины и печать ───────────────────────────────────────────────────
+    ws.column_dimensions['A'].width = 52
+    for c in range(2, ncol + 1):
+        ws.column_dimensions[get_column_letter(c)].width = 13
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_title_rows = '4:4'
+    return sc.cached, (list_first, list_last)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -756,12 +1037,24 @@ def build(source: Path, out: Path, dry_run: bool = False):
         flag = '' if info['visible'] else ' [скрытая вкладка]'
         print(f'    {i:2d}. {info["name"]:<44} {info["type"]:<5} '
               f'вкладка «{info["sheet"]}»{flag}')
+
+    # ── Плоская таблица: все значения всех дилеров одним списком ───────────
+    dealers = [info['name'] for info in infos]
+    records = []
+    for info in infos:
+        records.extend(flat_records_for_dealer(wb_f[info['sheet']], wb_v[info['sheet']], info))
+    n_scale = sum(1 for r in records if r['section'] == 'Шкала')
+    n_plan = len(records) - n_scale
+    print(f'  плоских записей    : {len(records)} (шкалы {n_scale}, план и бонусы {n_plan})')
     if dry_run:
         return
 
     out_wb = Workbook()
-    tgt = out_wb.active
-    tgt.title = SCALES_SHEET
+    flat_cached, flat_last = build_flat_sheet(out_wb, records)
+    show_cached, (cmp_first, cmp_last) = build_showcase_sheet(out_wb, records, dealers)
+
+    # ── Лист «Блоки»: исходные вкладки друг под другом ─────────────────────
+    tgt = out_wb.create_sheet(BLOCKS_SHEET)
     tgt.sheet_properties.outlinePr.summaryBelow = False  # маркер блока — над блоком
     tgt.sheet_view.showGridLines = True
 
@@ -769,18 +1062,18 @@ def build(source: Path, out: Path, dry_run: bool = False):
     blocks = []          # (info, marker_row, first_row, last_row)
     cursor = 1
 
-    # ── Шапка-пояснение ────────────────────────────────────────────────────
     legend = [
-        ('ШКАЛЫ СКИДОК ДИЛЕРОВ — условия работы ТПС 2026 финансового года', F_TITLE),
-        ('Все дилеры — на одном листе. Каждый дилер это блок строк, над ним строка-маркер '
-         '(ячейка A начинается с «### ДИЛЕР»).', F_HINT),
-        ('Числа правьте прямо в блоках: формулы, форматы, объединённые ячейки и оформление '
-         'сохранены. Строку-маркер не удаляйте — по ней калькулятор находит дилера.', F_HINT),
-        ('Калькулятор читает только блоки с маркером «### ДИЛЕР». Лист «Реестр» — справочник '
-         '(свод всех значений с адресами ячеек), на расчёт не влияет.', F_HINT),
+        ('БЛОКИ ДИЛЕРОВ — копия исходных вкладок, для сверки с оригиналом', F_TITLE),
+        ('Каждый дилер — блок строк, над ним строка-маркер (ячейка A начинается с '
+         '«### ДИЛЕР»). Строки блока сгруппированы: сворачиваются кнопкой слева.', F_HINT),
+        (f'Править шкалы нужно на листе «{FLAT_SHEET}» (плоская таблица) — именно её читает '
+         f'калькулятор. Лист «{SHOWCASE_SHEET}» показывает те же данные глазами.', F_HINT),
+        (f'Этот лист калькулятор разбирает только как запасной вариант — если листа '
+         f'«{FLAT_SHEET}» в файле не окажется. Формулы, форматы, объединённые ячейки и '
+         f'оформление перенесены из исходника 1:1.', F_HINT),
         (f'Собрано автоматически из legacy/{source.name} '
-         f'({len(wb_f.worksheets)} вкладок → 1 лист) • tools/consolidate_scales.py • '
-         f'{dt.date.today().isoformat()}', F_HINT),
+         f'({len(wb_f.worksheets)} вкладок → {len(infos)} блоков) • '
+         f'tools/consolidate_scales.py • {dt.date.today().isoformat()}', F_HINT),
     ]
     for text, font in legend:
         cell = tgt.cell(cursor, 1, text)
@@ -799,8 +1092,6 @@ def build(source: Path, out: Path, dry_run: bool = False):
     toc_last = cursor - 1
     cursor += 2                   # пустой разделитель
 
-    # ── Блоки дилеров ──────────────────────────────────────────────────────
-    registry = []
     for i, info in enumerate(infos, 1):
         ws = wb_f[info['sheet']]
         wsv = wb_v[info['sheet']]
@@ -824,23 +1115,18 @@ def build(source: Path, out: Path, dry_run: bool = False):
         copied = copy_block(ws, wsv, tgt, row_shift, cached)
         last_row = marker_row + copied
         blocks.append((info, marker_row, first_row, last_row))
-        cursor = last_row + 3             # два пустых строки-разделителя
-
-        recs, _covered = registry_records_for_dealer(ws, wsv, info, row_shift)
-        for rec in recs:
-            rec['dealer'] = info['name']
-            rec['dealer_type'] = info['type']
-        registry.extend(recs)
+        cursor = last_row + 3             # две пустые строки-разделителя
 
     # ── Содержание (после того как известны строки блоков) ─────────────────
-    for idx, ((info, marker_row, _first, _last), row) in enumerate(zip(blocks, range(toc_first, toc_last + 1)), 1):
+    for idx, ((info, marker_row, _first, _last), row) in enumerate(
+            zip(blocks, range(toc_first, toc_last + 1)), 1):
         cell = tgt.cell(row, 1,
                         f'{idx} • {info["name"]} • {info["type"]} • вкладка «{info["sheet"]}»'
                         f' • блок в строке {marker_row}')
         cell.font = F_TOC
         cell.alignment = A_LEFT
         cell.fill = FILL_TOC
-        cell.hyperlink = Hyperlink(ref=cell.coordinate, location=f"'{SCALES_SHEET}'!A{marker_row}",
+        cell.hyperlink = Hyperlink(ref=cell.coordinate, location=f"'{BLOCKS_SHEET}'!A{marker_row}",
                                    display=cell.value)
         tgt.row_dimensions[row].height = 15
 
@@ -852,77 +1138,36 @@ def build(source: Path, out: Path, dry_run: bool = False):
             continue
         tgt.column_dimensions[letter].width = round(width, 1)
 
-    # ── Печать: книжная ориентация не нужна, широкие блоки — в один лист ───
     tgt.page_setup.orientation = 'landscape'
     tgt.page_setup.fitToWidth = 1
     tgt.page_setup.fitToHeight = 0
     tgt.sheet_properties.pageSetUpPr.fitToPage = True
     tgt.print_title_rows = f'{toc_row}:{toc_row}'
 
-    # ── Лист «Реестр» ──────────────────────────────────────────────────────
-    reg = out_wb.create_sheet(REGISTRY_SHEET)
-    note = (f'{REGISTRY_MARKER} • справочник: все значения шкал одним списком '
-            f'({len(registry)} строк). Лист формируется автоматически '
-            f'(tools/consolidate_scales.py) и в расчёте не участвует — '
-            f'правьте шкалы на листе «{SCALES_SHEET}».')
-    nc = reg.cell(1, 1, note)
-    nc.font = F_HINT
-    nc.alignment = A_LEFT
-    reg.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(REGISTRY_HEADER))
-    reg.row_dimensions[1].height = 28
-    reg.cell(1, 1).alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-
-    for c, title in enumerate(REGISTRY_HEADER, 1):
-        cell = reg.cell(2, c, title)
-        cell.font = F_HDR
-        cell.fill = FILL_HDR
-        cell.border = B_ALL
-        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        reg.column_dimensions[get_column_letter(c)].width = REGISTRY_WIDTHS[c - 1]
-    reg.row_dimensions[2].height = 30
-
-    section_order = {'План': 0, 'Шкала': 1, 'Контроль': 2, 'Примечание': 3, 'Прочее': 4}
-    dealer_order = {info['sheet']: i for i, info in enumerate(infos)}
-    registry.sort(key=lambda r: (dealer_order.get(r['source'].split('!')[0], 99),
-                                 section_order.get(r['section'], 9),
-                                 r['_rc'][0], r['_rc'][1]))
-
-    row = 3
-    for n, rec in enumerate(registry, 1):
-        pct = normalize_pct(rec['value'], rec['fmt'], rec['pct_mode'])
-        values = [n, rec['dealer'], rec['dealer_type'], rec['source'].split('!')[0],
-                  rec['section'], rec['table'], rec['period'], rec['label'], rec['sub'],
-                  rec['tier'], rec['value'], pct, 'да' if rec['is_total'] else '',
-                  rec['target'], rec['source'], rec['note']]
-        for c, v in enumerate(values, 1):
-            cell = reg.cell(row, c, v if v != '' else None)
-            cell.border = B_ALL
-            cell.alignment = A_WRAP if c in (8, 9, 16) else Alignment(vertical='top')
-            if c == 12 and isinstance(v, (int, float)):
-                cell.number_format = '0.##'
-            elif c == 11 and isinstance(v, (int, float)):
-                cell.number_format = rec['fmt'] if rec['fmt'] and rec['fmt'] != 'General' else '#,##0.####'
-        row += 1
-
-    reg.freeze_panes = 'E3'
-    reg.auto_filter.ref = f'A2:{get_column_letter(len(REGISTRY_HEADER))}{row - 1}'
-    reg.page_setup.orientation = 'landscape'
-    reg.page_setup.fitToWidth = 1
-    reg.sheet_properties.pageSetUpPr.fitToPage = True
-
     out_wb.calculation.fullCalcOnLoad = True  # Excel пересчитает формулы при открытии
     out.parent.mkdir(parents=True, exist_ok=True)
     out_wb.save(out)
 
-    injected = inject_cached_values(out, SCALES_SHEET, cached)
+    # openpyxl не умеет писать формулу вместе со значением — дописываем кэш в XML,
+    # иначе SheetJS (и любой читатель без пересчёта) увидит пустые ячейки.
+    inj_flat = inject_cached_values(out, FLAT_SHEET, flat_cached)
+    inj_show = inject_cached_values(out, SHOWCASE_SHEET, show_cached)
+    inj_blocks = inject_cached_values(out, BLOCKS_SHEET, cached)
 
     print(f'\nГотово: {out.relative_to(ROOT)}')
-    print(f'  лист «{SCALES_SHEET}» : {len(blocks)} блоков дилеров, строк {tgt.max_row}, '
+    print(f'  лист «{FLAT_SHEET}»    : плоская таблица, {len(records)} записей '
+          f'({len(dealers)} дилеров), строк {flat_last}')
+    print(f'  лист «{SHOWCASE_SHEET}»  : формул {len(show_cached)} '
+          f'(кэш-значения: {inj_show}), сравнение дилеров в строках {cmp_first}–{cmp_last}')
+    print(f'  лист «{BLOCKS_SHEET}»    : {len(blocks)} блоков дилеров, строк {tgt.max_row}, '
           f'колонок {tgt.max_column}')
-    print(f'  лист «{REGISTRY_SHEET}»: {len(registry)} записей справочника')
-    print(f'  формул перенесено    : {len(cached)} (кэш-значения восстановлены: {injected})')
+    print(f'  формул в блоках      : {len(cached)} (кэш-значения восстановлены: {inj_blocks})')
+    print(f'  ключей в плоской     : {len(flat_cached)} (кэш-значения: {inj_flat})')
     print(f'  объединённых ячеек   : {len(tgt.merged_cells.ranges)}')
-    return {'blocks': blocks, 'registry': registry, 'cached': cached}
+    return {'blocks': blocks, 'records': records, 'cached': cached,
+            'flat_cached': flat_cached, 'showcase_cached': show_cached,
+            'dealers': dealers, 'flat_last': flat_last}
+
 
 
 def main():
