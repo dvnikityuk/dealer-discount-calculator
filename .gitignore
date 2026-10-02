@@ -70,3 +70,8 @@ local-*
 
 # ─── Examples not part of build ──────────────────────────────────
 /examples/
+
+# ─── Python (tools/consolidate_scales.py, tools/verify_scales.py) ─
+__pycache__/
+*.py[cod]
+/.venv/

@@ -564,12 +564,12 @@ table.monthly tr.year-row td { background: #e0f2fe; font-weight: 700; }
             <ul style="list-style: disc; padding-left: 22px; margin-bottom: 10px;">
               <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/plan.xlsx</code> — планы дилеров на год (лист «Планы»)</li>
               <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/fact.csv</code> — факты отгрузок (CSV: Тип ТМЦ, Дилер, MonthStart, Выручка)</li>
-              <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/scales.xlsx</code> — шкалы скидок (один лист на дилера, со шкалами оборудования / расходных материалов / сервиса)</li>
+              <li><code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/scales.xlsx</code> — шкалы скидок: <b>все дилеры на одном листе «Шкалы»</b> (блок строк на дилера, над блоком строка-маркер <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">### ДИЛЕР …</code>) + справочный лист «Реестр». Старый формат «одна вкладка на дилера» тоже понимается.</li>
             </ul>
             <p style="margin-bottom: 6px;"><strong>Как обновить данные:</strong></p>
             <ol style="list-style: decimal; padding-left: 22px; margin-bottom: 0;">
               <li>Откройте проект локально на ПК</li>
-              <li>Замените файлы в папке <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/</code></li>
+              <li>Замените файлы в папке <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">data_sample/</code>. Шкалы правьте прямо в листе «Шкалы» — строки-маркеры <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">### ДИЛЕР</code> не удаляйте, по ним дилеры находятся. Лист «Реестр» справочный: он пересобирается скриптом <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;font-family:monospace;">tools/consolidate_scales.py</code>.</li>
               <li>Откройте приложение — данные загрузятся автоматически</li>
             </ol>
             <p style="margin-top: 10px; font-size: 12px; color: #94a3b8;">Текущий статус: <span id="data-load-status" style="font-weight: 500;">загрузка…</span></p>
@@ -636,7 +636,9 @@ function csvTypeToKey(t) {
  * Fetch 3 data files from data_sample/ and build app state:
  *   - plan.xlsx  → dealers + annual plans
  *   - fact.csv   → monthly facts (CSV: Тип ТМЦ, Дилеры, MonthStart, Выручка)
- *   - scales.xlsx → per-dealer scale tables (one sheet per dealer)
+ *   - scales.xlsx → per-dealer scale tables: either one consolidated sheet
+ *                   («Шкалы», block per dealer separated by «### ДИЛЕР» marker
+ *                   rows) or the legacy layout with one sheet per dealer.
  *
  * Falls back to embedded SEED_STATE if fetch fails.
  */
@@ -654,7 +656,8 @@ async function loadDataFromSample() {
   const planBuf = await planRes.arrayBuffer();
   const factText = await factRes.text();
   const scalesBuf = await scalesRes.arrayBuffer();
-  const parsed = parseDataSampleFiles(planBuf, factText, scalesBuf);
+  const stats = {};
+  const parsed = parseDataSampleFiles(planBuf, factText, scalesBuf, stats);
   state = parsed;
   const withScales = parsed.dealers.filter(d => d.scales && d.scales.length > 0).length;
   const withFacts = parsed.dealers.filter(d => {
@@ -663,13 +666,23 @@ async function loadDataFromSample() {
             f.equipment.months.some(v => v !== null) ||
             f.materials.months.some(v => v !== null));
   }).length;
-  setStatus('загружено ' + parsed.dealers.length + ' дилеров, ' + withFacts + ' с фактами, ' + withScales + ' со шкалами', true);
+  const scalesNote = stats.scalesFormat === 'single-sheet'
+    ? 'шкалы: единый лист, блоков ' + stats.scalesBlocks
+    : 'шкалы: ' + stats.scalesSheets + ' вкладок, блоков ' + stats.scalesBlocks;
+  const brokenNote = stats.scalesBroken ? ' • не разобрано блоков: ' + stats.scalesBroken : '';
+  setStatus(
+    'загружено ' + parsed.dealers.length + ' дилеров, ' + withFacts + ' с фактами, ' +
+    withScales + ' со шкалами • ' + scalesNote + brokenNote,
+    stats.scalesBroken ? false : true);
 }
 
 /**
  * Parse plan.xlsx + fact.csv + scales.xlsx into app state.
+ *
+ * @param stats необязательный объект-приёмник статистики разбора шкал
+ *              (формат файла, число блоков) — используется в строке статуса.
  */
-function parseDataSampleFiles(planBuf, factText, scalesBuf) {
+function parseDataSampleFiles(planBuf, factText, scalesBuf, stats) {
   // ─── 1. Parse plan.xlsx → dealers with empty facts and scales ────────────
   const wbP = XLSX.read(planBuf, { type: 'array' });
   const plansSheet = wbP.Sheets['Планы'];
@@ -765,80 +778,77 @@ function parseDataSampleFiles(planBuf, factText, scalesBuf) {
   }
 
   // ─── 3. Parse scales.xlsx → extract per-dealer scale tables ──────────────
-  // Layout (per sheet):
-  //   Row 0: empty
-  //   Row 1: header row containing "Выручка 2024" / "Выручка 2025"
-  //   Row 2: dealer name + annual revenue values
-  //   Row 3+: plan category rows (Сервис, Оборудование, Расходные материалы)
-  //   Row N+: scale tables (Оборудование / Расходные материалы / Сервис)
+  // Поддерживаются два формата файла шкал:
   //
-  // SheetJS strips leading empty columns inconsistently across sheets, so we
-  // dynamically detect the "label column" by locating "Выручка 2024" — the
-  // cell to its LEFT is the label column (where dealer name and section
-  // headers live). Tier labels and data values start at labelCol + 2.
+  //  A) ЕДИНЫЙ ЛИСТ (так собран docs/data_sample/scales.xlsx): все дилеры лежат
+  //     на одном листе «Шкалы», каждый дилер — блок строк, а над блоком стоит
+  //     строка-маркер вида
+  //       «### ДИЛЕР 1/18 • КОМПО Технолоджис • РФ (отчётность за квартал) • …»
+  //     Маркеры с другими тегами («### РЕЕСТР», «### АРХИВ», …) помечают листы и
+  //     блоки, которые в расчёте не участвуют.
+  //  B) СТАРЫЙ ФОРМАТ: одна вкладка на дилера, служебные вкладки «Лист1/Лист2/
+  //     Лист3». Маркеров нет → вкладка целиком считается одним блоком.
+  //
+  // Разметка блока в обоих форматах одинаковая:
+  //   Row 0-1: empty
+  //   Row 2:   header row containing "Выручка 2024" / "Выручка 2025"
+  //   Row 3:   dealer name + annual revenue values
+  //   Row 4+:  plan category rows (Сервис, Оборудование, Расходные материалы)
+  //   Row N+:  scale tables (Оборудование / Расходные материалы / Сервис)
   const wbS = XLSX.read(scalesBuf, { type: 'array' });
   const allScales = [];
   const scalesByDealerName = {};
+  let scalesBlocks = 0, scalesMarked = 0, scalesSkipped = 0, scalesBroken = 0;
 
   for (const sheetName of wbS.SheetNames) {
+    // Формат B: «Лист1», «Лист2», «Лист3» — служебные, не дилеры.
     if (/^лист\d*$/i.test(sheetName)) continue;
     const ws = wbS.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
-    if (!rows || rows.length < 12) continue;
+    if (!rows || !rows.length) continue;
 
-    // ─── 3a. Find header row containing "Выручка 2024"/"Выручка 2025" ────────
-    let headerRow = -1;
-    for (let r = 0; r < Math.min(8, rows.length); r++) {
-      const row = rows[r];
-      if (!row) continue;
-      for (let c = 0; c < row.length; c++) {
-        const v = row[c];
-        if (v && /Выручка\s*202[3-6]/i.test(String(v))) {
-          headerRow = r;
-          break;
+    for (const block of splitDealerBlocks(rows)) {
+      if (block.kind === 'skip') { scalesSkipped++; continue; }
+      if (block.marker) scalesMarked++;
+
+      const parsed = parseDealerBlock(block.rows, block.marker);
+      if (!parsed) {
+        if (block.marker) {
+          scalesBroken++;
+          console.warn('[scales] блок не разобран:', sheetName, block.marker);
         }
+        continue;
       }
-      if (headerRow >= 0) break;
-    }
-    if (headerRow < 0) continue;
+      scalesBlocks++;
+      // Блок без таблиц не регистрируем: иначе пустой блок (например, архивный)
+      // перезаписал бы шкалы настоящего дилера с тем же именем.
+      if (parsed.scales.length === 0) continue;
 
-    // ─── 3b. labelCol = col of first string cell in row[headerRow+1] ────────
-    // The dealer name is in the row below the header. Its column is the
-    // "label column" — all section headers and row labels live there.
-    const dealerRow = rows[headerRow + 1];
-    if (!dealerRow) continue;
-    let labelCol = -1, dealerName = '';
-    for (let c = 0; c < dealerRow.length; c++) {
-      const v = dealerRow[c];
-      if (typeof v === 'string' && v.trim() !== '') {
-        labelCol = c;
-        dealerName = v.trim();
-        break;
+      // Имя берём из блока, а имя из маркера — как дополнительный ключ
+      // сопоставления (на случай, если в блоке имя сократили).
+      const keys = new Set([normName(parsed.dealerName)]);
+      if (parsed.markerName) keys.add(normName(parsed.markerName));
+      for (const key of keys) {
+        if (key) scalesByDealerName[key] = parsed.scales;
       }
-    }
-    if (labelCol < 0 || !dealerName) continue;
-    if (/^(сервис|оборудование|расходные\s*материалы|запасные\s*части|выручка)/i.test(dealerName)) continue;
-
-    // ─── 3c. Detect dealer type: РФ if "СИСТЕМА РАСЧЕТА СКИДКИ ПО ЗАПЧАСТЯМ" ──
-    let dealerType = 'Заруб';
-    for (let r = 0; r < rows.length; r++) {
-      const v = rows[r] && rows[r][labelCol];
-      if (v && /СИСТЕМА\s+РАСЧЕТА\s+СКИДКИ\s+ПО\s+ЗАПЧАСТЯМ/i.test(String(v))) {
-        dealerType = 'РФ';
-        break;
+      if (allScales.length === 0) {
+        allScales.push(...parsed.scales);
       }
     }
+  }
 
-    const ctx = { rows, labelCol, maxRow: rows.length - 1 };
-    const equipment = extractEquipmentScaleJS(ctx, dealerType);
-    const materials = extractMaterialsScaleJS(ctx, dealerType);
-    const service   = extractServiceScaleJS(ctx, dealerType);
-    const scales = [equipment, materials, service].filter(s => s !== null);
+  if (scalesMarked === 0 && scalesSkipped > 0) {
+    console.warn('[scales] найдены только маркеры-пропуски (' + scalesSkipped +
+                 ') — ни одного блока «### ДИЛЕР»; проверьте строки-маркеры.');
+  }
 
-    scalesByDealerName[normName(dealerName)] = scales;
-    if (allScales.length === 0 && scales.length > 0) {
-      allScales.push(...scales);
-    }
+  if (stats) {
+    stats.scalesFormat = scalesMarked > 0 ? 'single-sheet' : 'multi-sheet';
+    stats.scalesSheets = wbS.SheetNames.length;
+    stats.scalesBlocks = scalesBlocks;
+    stats.scalesMarked = scalesMarked;
+    stats.scalesSkipped = scalesSkipped;
+    stats.scalesBroken = scalesBroken;
   }
 
   // Assign scales to each dealer (match by normalized name)
@@ -866,6 +876,122 @@ function parseDataSampleFiles(planBuf, factText, scalesBuf) {
     scales: allScales,
     lastSync: null,
   };
+}
+
+// ─── Единый лист: строки-маркеры и блоки дилеров ─────────────────────────────
+// Строка-маркер — это строка, в одной из первых четырёх ячеек которой текст
+// начинается с «###». Тег «ДИЛЕР» открывает блок дилера (действует до следующего
+// маркера), любой другой тег («РЕЕСТР», «АРХИВ», «СЛУЖЕБНОЕ»…) — блок, который
+// расчёт пропускает. Если маркеров в листе нет, лист разбирается целиком — так
+// поддерживается старый формат «одна вкладка = один дилер».
+// NB: `\b` в JS не является границей слова для кириллицы, поэтому после «ДИЛЕР»
+// используется явный отрицательный просмотр на букву.
+const DEALER_MARKER_RE = /^\s*#{2,}\s*(?:ДИЛЕР|DEALER)(?![A-Za-zА-Яа-яЁё])/i;
+const SKIP_MARKER_RE = /^\s*#{2,}\s*(?:РЕЕСТР|АРХИВ|СЛУЖЕБ|SKIP|REGISTRY|ARCHIVE|IGNORE)/i;
+const ANY_MARKER_RE = /^\s*#{2,}\s*[A-Za-zА-Яа-яЁё]/;
+
+function markerTextOfRow(row) {
+  if (!row) return null;
+  for (let c = 0; c < Math.min(row.length, 4); c++) {
+    const v = row[c];
+    if (typeof v === 'string' && ANY_MARKER_RE.test(v)) return v.trim();
+  }
+  return null;
+}
+
+/** Имя дилера из маркера: «### ДИЛЕР 1/18 • КОМПО Технолоджис • РФ …» → имя. */
+function markerDealerName(markerText) {
+  if (!markerText) return '';
+  const parts = String(markerText).split(/[•|]/).map(s => s.trim());
+  if (parts.length < 2) return '';
+  return parts[1].replace(/^#{2,}\s*/, '').trim();
+}
+
+function splitDealerBlocks(rows) {
+  const marks = [];
+  for (let r = 0; r < rows.length; r++) {
+    const text = markerTextOfRow(rows[r]);
+    if (!text) continue;
+    marks.push({
+      r,
+      kind: DEALER_MARKER_RE.test(text) ? 'dealer' : 'skip',
+      text,
+    });
+  }
+  // Старый формат: маркеров нет — весь лист является одним блоком дилера.
+  if (marks.length === 0) return [{ kind: 'dealer', marker: null, rows }];
+
+  const blocks = [];
+  for (let i = 0; i < marks.length; i++) {
+    const from = marks[i].r + 1;
+    const to = i + 1 < marks.length ? marks[i + 1].r : rows.length;
+    if (to <= from) continue;
+    blocks.push({ kind: marks[i].kind, marker: marks[i].text, rows: rows.slice(from, to) });
+  }
+  return blocks;
+}
+
+/**
+ * Разбирает один блок дилера (массив строк листа) в { dealerName, dealerType, scales }.
+ *
+ * SheetJS strips leading empty columns inconsistently across sheets, so we
+ * dynamically detect the "label column" by locating "Выручка 2024" — the
+ * cell to its LEFT is the label column (where dealer name and section
+ * headers live). Tier labels and data values start at labelCol + 2.
+ */
+function parseDealerBlock(rows, markerText) {
+  if (!rows || rows.length < 12) return null;
+
+  // ─── a. Find header row containing "Выручка 2024"/"Выручка 2025" ──────────
+  let headerRow = -1;
+  for (let r = 0; r < Math.min(8, rows.length); r++) {
+    const row = rows[r];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      const v = row[c];
+      if (v && /Выручка\s*202[3-6]/i.test(String(v))) {
+        headerRow = r;
+        break;
+      }
+    }
+    if (headerRow >= 0) break;
+  }
+  if (headerRow < 0) return null;
+
+  // ─── b. labelCol = col of first string cell in row[headerRow+1] ───────────
+  // The dealer name is in the row below the header. Its column is the
+  // "label column" — all section headers and row labels live there.
+  const dealerRow = rows[headerRow + 1];
+  if (!dealerRow) return null;
+  let labelCol = -1, dealerName = '';
+  for (let c = 0; c < dealerRow.length; c++) {
+    const v = dealerRow[c];
+    if (typeof v === 'string' && v.trim() !== '') {
+      labelCol = c;
+      dealerName = v.trim();
+      break;
+    }
+  }
+  if (labelCol < 0 || !dealerName) return null;
+  if (/^(сервис|оборудование|расходные\s*материалы|запасные\s*части|выручка)/i.test(dealerName)) return null;
+
+  // ─── c. Detect dealer type: РФ if "СИСТЕМА РАСЧЕТА СКИДКИ ПО ЗАПЧАСТЯМ" ────
+  let dealerType = 'Заруб';
+  for (let r = 0; r < rows.length; r++) {
+    const v = rows[r] && rows[r][labelCol];
+    if (v && /СИСТЕМА\s+РАСЧЕТА\s+СКИДКИ\s+ПО\s+ЗАПЧАСТЯМ/i.test(String(v))) {
+      dealerType = 'РФ';
+      break;
+    }
+  }
+
+  const ctx = { rows, labelCol, maxRow: rows.length - 1 };
+  const equipment = extractEquipmentScaleJS(ctx, dealerType);
+  const materials = extractMaterialsScaleJS(ctx, dealerType);
+  const service   = extractServiceScaleJS(ctx, dealerType);
+  const scales = [equipment, materials, service].filter(s => s !== null);
+
+  return { dealerName, markerName: markerDealerName(markerText), dealerType, scales };
 }
 
 // ─── Scale extraction helpers ───────────────────────────────────────────────
